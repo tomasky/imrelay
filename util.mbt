@@ -373,11 +373,11 @@ pub fn hmac_sha256_hex(secret : String, data : String) -> String {
 }
 
 ///|
-/// Write one log line to stdout, flushed immediately. `println` goes through
-/// the C stdio buffer, which can hold short log lines back for a long time
-/// when stdout is a pipe (every deployment); this writes straight to fd 1.
+/// Write one log line to stderr, flushed immediately. Logs must not share
+/// stdout with protocol output (the `moon test` driver parses test results
+/// from stdout), and stderr is unbuffered even when stdout is a pipe.
 pub async fn log_line(line : String) -> Unit {
-  @stdio.stdout.write("\{line}\n") catch {
+  @stdio.stderr.write("\{line}\n") catch {
     _ => ()
   }
 }
