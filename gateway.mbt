@@ -255,10 +255,6 @@ async fn Gateway::handle_webhook(
     )
     return
   }
-  if seg == "demo/message" {
-    self.handle_demo(conn, raw)
-    return
-  }
   match Platform::of_value(seg) {
     None =>
       respond_text(
@@ -667,66 +663,6 @@ async fn poll_matrix(
 }
 
 ///|
-/// Run the agent on a synthetic event so the wiring can be exercised without
-/// any platform credentials: `POST /demo/message {"platform":"telegram",
-/// "chat_id":"1","text":"hi"}`.
-async fn Gateway::handle_demo(
-  self : Gateway,
-  conn : @http.ServerConnection,
-  raw : String,
-) -> Unit {
-  let j = @json.parse(raw) catch {
-    _ => {
-      respond_text(conn, 400, "Bad Request", "{\"error\":\"invalid JSON\"}")
-      return
-    }
-  }
-  let text = json_field_string(j, "text").unwrap_or("")
-  if text.is_empty() {
-    respond_text(conn, 400, "Bad Request", "{\"error\":\"missing text\"}")
-    return
-  }
-  let platform = match json_field_string(j, "platform") {
-    Some(p) => Platform::of_value(p).unwrap_or(Telegram)
-    None => Telegram
-  }
-  let chat_id = json_field_string(j, "chat_id").unwrap_or("demo")
-  let session = self.store.session(platform, chat_id)
-  let ev = MessageEvent::new(
-    text,
-    if text.has_prefix("/") {
-      Command
-    } else {
-      Text
-    },
-    platform,
-    chat_id,
-    media=[],
-    timestamp=now_ms(),
-  )
-  session.push("user", text)
-  let mut reply = match parse_command(text) {
-    Some(cmd) =>
-      match command_reply(cmd, self.cfg, session) {
-        Some(r) => r
-        None => (self.handler)(ev, session)
-      }
-    None => (self.handler)(ev, session)
-  }
-  if reply.is_empty() {
-    reply = "(silent)"
-  }
-  let payload = json_obj([
-    ("ok", Json::boolean(true)),
-    ("platform", Json::string(platform.value())),
-    ("chat_id", Json::string(chat_id)),
-    ("reply", Json::string(reply)),
-    ("turns", Json::number(session.history.length().to_double())),
-  ])
-  respond_json(conn, 200, payload)
-}
-
-///|
 /// Minimal landing page describing the running gateway.
 fn Gateway::landing_html(self : Gateway) -> String {
   let sb = StringBuilder()
@@ -745,29 +681,11 @@ fn Gateway::landing_html(self : Gateway) -> String {
     sb.write_string("<li><code>POST /\{p.value()}</code> — \{p.name()}</li>")
   }
   sb.write_string("</ul>")
-  sb.write_string("<h2>Try the agent</h2>")
-  sb.write_string(
-    "<pre>curl -s localhost:\{self.cfg.port}/demo/message -H 'content-type: application/json' \\<br>&nbsp;&nbsp;-d '{\"platform\":\"telegram\",\"chat_id\":\"1\",\"text\":\"hello\"}'</pre>",
-  )
   sb.write_string(
     "<p>Health: <code>/health</code> · Sessions live in memory, keyed by <code>platform:chat_id</code>.</p>",
   )
   sb.write_string("</body></html>")
   sb.to_string()
-}
-
-///|
-/// Send a JSON HTTP response.
-async fn respond_json(
-  conn : @http.ServerConnection,
-  code : Int32,
-  payload : Json,
-) -> Unit {
-  conn.send_response(code, "OK", extra_headers={
-    "Content-Type": "application/json",
-  })
-  conn.write_string(payload.stringify())
-  conn.end_response()
 }
 
 ///|

@@ -6,7 +6,6 @@
 //   GET  /                 landing page (also the health of the deploy)
 //   GET  /health           JSON health/status
 //   POST /<platform>       inbound webhook for that platform
-//   POST /demo/message     run the agent on a synthetic event
 //
 // The demo agent below is intentionally trivial — swap `demo_agent` for your
 // own model call; it receives the normalized event *and* the chat `Session`,
@@ -51,7 +50,7 @@ async fn main {
   let platforms = cfg.enabled_platforms()
   if platforms.is_empty() {
     println(
-      "[imrelay] no platform credentials found — webhook routes and POST /demo/message still work.",
+      "[imrelay] no platform credentials found — no platform webhook routes are active.",
     )
   } else {
     let sb = StringBuilder()

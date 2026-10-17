@@ -54,10 +54,7 @@ Then:
 GET  /                        landing page / health check
 GET  /health                  {"ok":true,"platforms":N}
 POST /<platform>              inbound webhook for that platform (per table above)
-POST /demo/message            run the agent on a synthetic event (no credentials needed)
 ```
-
-`POST /demo/message` body: `{"text":"hi","platform":"telegram","chat_id":"demo"}`.
 
 ## Configuration
 
