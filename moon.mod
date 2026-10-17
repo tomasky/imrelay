@@ -20,7 +20,7 @@ keywords = [
   "slack",
 ]
 
-preferred_target = "wasm"
+preferred_target = "native"
 
 description = "Hermes-style agent gateway in MoonBit: bridges 14 messaging platforms (Telegram, Discord, Slack, WhatsApp, Signal, Email, Home Assistant, Mattermost, Matrix, DingTalk, Feishu/Lark, WeChat, WeCom, iMessage via BlueBubbles) into a single agent callback, with retries, chunking, typing indicators, per-chat sessions and slash commands. TOML configuration with Hermes-compatible environment-variable fallback."
 

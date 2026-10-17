@@ -296,6 +296,17 @@ async fn Gateway::handle_webhook(
           None => ()
         }
       }
+      if platform == Wecom {
+        // The URL-verification handshake carries `msg_signature` in its query
+        // and must answer the decrypted `echostr`.
+        match wecom_callback_params(request.path).echostr {
+          Some(_) => {
+            ignore(self.handle_verification(platform, request, raw, conn))
+            return
+          }
+          None => ()
+        }
+      }
       let (status, reason) = webhook_auth_status(platform, pcfg, request, raw)
       if status != 0 {
         respond_text(
@@ -310,13 +321,34 @@ async fn Gateway::handle_webhook(
       if handled {
         return
       }
-      let events = parse_inbound(platform, raw)
-      respond_text(
-        conn,
-        200,
-        "OK",
-        "{\"ok\":true,\"accepted\":\{events.length()}}",
-      )
+      let body = match platform {
+        Wecom =>
+          match wecom_unwrap_callback(pcfg, raw) {
+            Ok(b) => b
+            Err(reason) => {
+              respond_text(
+                conn,
+                400,
+                "Bad Request",
+                "{\"error\":\"wecom callback rejected\",\"reason\":\"\{reason}\"}",
+              )
+              return
+            }
+          }
+        _ => raw
+      }
+      let events = parse_inbound(platform, body)
+      if platform == Wecom {
+        // WeCom expects the literal `success` text (or an empty body).
+        respond_text(conn, 200, "OK", "success")
+      } else {
+        respond_text(
+          conn,
+          200,
+          "OK",
+          "{\"ok\":true,\"accepted\":\{events.length()}}",
+        )
+      }
       for ev in events {
         self.handle_event(ev)
       }
@@ -329,7 +361,8 @@ async fn Gateway::handle_webhook(
 /// processed, or an HTTP status and reason when it must be rejected. Webhook
 /// payloads that carry a platform signature (`slack`, `whatsapp`, `telegram`)
 /// fail closed while no secret is configured; platforms with no signature
-/// scheme only check once a shared secret is configured.
+/// scheme only check once a shared secret is configured. WeCom checks
+/// `msg_signature` once callback crypto (`encoding_aes_key`) is configured.
 pub fn webhook_auth_status(
   platform : Platform,
   pcfg : PlatformConfig,
@@ -423,6 +456,39 @@ pub fn webhook_auth_status(
         }
       }
     }
+    Wecom => {
+      // Callback crypto is opt-in: when `encoding_aes_key` is set, every
+      // request must carry a valid `msg_signature` over its `<Encrypt>`;
+      // otherwise bodies pass through (relay mode).
+      let aes_key = wecom_encoding_aes_key(pcfg)
+      if aes_key.is_empty() {
+        (0, "")
+      } else {
+        let token = wecom_callback_token(pcfg)
+        if token.is_empty() {
+          (
+            503, "wecom callback_token not configured (set [wecom.extra] callback_token / WECOM_CALLBACK_TOKEN)",
+          )
+        } else {
+          let params = wecom_callback_params(request.path)
+          match xml_text(raw, "Encrypt") {
+            None => (400, "missing <Encrypt> in wecom callback body")
+            Some(encrypt) =>
+              if wecom_verify_msg_signature(
+                  token,
+                  params.timestamp,
+                  params.nonce,
+                  encrypt,
+                  params.msg_signature,
+                ) {
+                (0, "")
+              } else {
+                (401, "invalid WeCom msg_signature")
+              }
+          }
+        }
+      }
+    }
     _ => (0, "")
   }
 }
@@ -446,7 +512,8 @@ fn http_reason(code : Int32) -> String {
 
 ///|
 /// Answer platform verification handshakes (Slack/Feishu challenge, WhatsApp
-/// `hub.challenge`). Returns `true` when the request was fully handled.
+/// `hub.challenge`, WeCom `echostr`). Returns `true` when the request was
+/// fully handled.
 async fn Gateway::handle_verification(
   self : Gateway,
   platform : Platform,
@@ -490,6 +557,43 @@ async fn Gateway::handle_verification(
           }
         }
         None => false
+      }
+    Wecom =>
+      match self.cfg.get(Wecom) {
+        None => false
+        Some(pcfg) => {
+          let params = wecom_callback_params(request.path)
+          match params.echostr {
+            None => false
+            Some(echostr) => {
+              let token = wecom_callback_token(pcfg)
+              let aes_key = wecom_encoding_aes_key(pcfg)
+              if token.is_empty() || aes_key.is_empty() {
+                respond_text(
+                  conn, 403, "Forbidden", "wecom callback crypto not configured (set callback_token / encoding_aes_key)",
+                )
+              } else {
+                match
+                  wecom_decrypt_message(
+                    token,
+                    aes_key,
+                    wecom_corp_id(pcfg),
+                    params.msg_signature,
+                    params.timestamp,
+                    params.nonce,
+                    echostr,
+                  ) {
+                  Some(plain) => respond_text(conn, 200, "OK", plain)
+                  None =>
+                    respond_text(
+                      conn, 403, "Forbidden", "wecom URL verification failed (msg_signature mismatch)",
+                    )
+                }
+              }
+              true
+            }
+          }
+        }
       }
     _ => false
   }

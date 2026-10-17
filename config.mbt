@@ -778,6 +778,14 @@ pub fn GatewayConfig::from_env() -> GatewayConfig {
       Some(v) => extra.set("agent_id", v)
       None => ()
     }
+    match env("WECOM_CALLBACK_TOKEN") {
+      Some(v) => extra.set("callback_token", v)
+      None => ()
+    }
+    match env("WECOM_CALLBACK_ENCODING_AES_KEY") {
+      Some(v) => extra.set("encoding_aes_key", v)
+      None => ()
+    }
     match env("WECOM_GROUP_ROBOT_WEBHOOK") {
       Some(v) => extra.set("group_robot_webhook", v)
       None => ()

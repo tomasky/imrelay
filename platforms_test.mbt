@@ -1043,6 +1043,234 @@ test "wecom: parse JSON and XML callbacks" {
 }
 
 ///|
+/// Official Tencent `WXBizMsgCrypt` sample (docs: 加解密方案说明): token
+/// `QDG6eK`, corp id `wx5823bf96d3bd56c7` and its URL-verification `echostr`.
+const WC_TOKEN : String = "QDG6eK"
+
+///|
+const WC_AES_KEY : String = "jWmYm7qr5nMoAUwZRjGtBxmz3KA1tkAj3ykkR6q2B2C"
+
+///|
+const WC_CORP : String = "wx5823bf96d3bd56c7"
+
+///|
+const WC_ECHOSTR : String = "P9nAzCzyDtyTWESHep1vC5X9xho/qYX3Zpb4yKa9SKld1DsH3Iyt3tP3zNdtp+4RPcs8TgAE7OaBO+FZXvnaqQ=="
+
+///|
+const WC_ECHOSTR_SIG : String = "5c45ff5e21c57e6ad56bac8758b79b1d9ac89fd3"
+
+///|
+const WC_XML_PLAIN : String =
+  #|<xml><ToUserName><![CDATA[wx5823bf96d3bd56c7]]></ToUserName><FromUserName><![CDATA[user001]]></FromUserName><CreateTime>1729000000</CreateTime><MsgType><![CDATA[text]]></MsgType><Content><![CDATA[hello imrelay]]></Content><MsgId>1234567890123456</MsgId><AgentID>1000002</AgentID></xml>
+
+///|
+test "wecom crypto: official signature and echostr vector" {
+  assert_eq(
+    @imrelay.wecom_msg_signature(
+      WC_TOKEN,
+      "1409659589",
+      "263014780",
+      WC_ECHOSTR,
+    ),
+    WC_ECHOSTR_SIG,
+  )
+  assert_true(
+    @imrelay.wecom_verify_msg_signature(
+      WC_TOKEN,
+      "1409659589",
+      "263014780",
+      WC_ECHOSTR,
+      WC_ECHOSTR_SIG,
+    ),
+  )
+  assert_false(
+    @imrelay.wecom_verify_msg_signature(
+      WC_TOKEN,
+      "1409659589",
+      "263014781",
+      WC_ECHOSTR,
+      WC_ECHOSTR_SIG,
+    ),
+  )
+  // Sort-order pin: the parts sort differently from their argument order.
+  assert_eq(
+    @imrelay.wecom_msg_signature("ztoken", "1", "2", "aenc"),
+    "c411e13bd2547aaf91caf5afb003405e2b582cdb",
+  )
+  assert_eq(
+    @imrelay.wecom_decrypt_message(
+      WC_TOKEN,
+      WC_AES_KEY,
+      WC_CORP,
+      WC_ECHOSTR_SIG,
+      "1409659589",
+      "263014780",
+      WC_ECHOSTR,
+    ),
+    Some("1616140317555161061"),
+  )
+  // Wrong receive_id, tampered payload, bad signature.
+  assert_eq(
+    @imrelay.wecom_decrypt_message(
+      WC_TOKEN,
+      WC_AES_KEY,
+      "wx-other",
+      WC_ECHOSTR_SIG,
+      "1409659589",
+      "263014780",
+      WC_ECHOSTR,
+    ),
+    None,
+  )
+  let tampered = "\{WC_ECHOSTR[:WC_ECHOSTR.length() - 3]}R=="
+  assert_eq(
+    @imrelay.wecom_decrypt_message(
+      WC_TOKEN,
+      WC_AES_KEY,
+      WC_CORP,
+      WC_ECHOSTR_SIG,
+      "1409659589",
+      "263014780",
+      tampered,
+    ),
+    None,
+  )
+  assert_eq(
+    @imrelay.wecom_decrypt_message(
+      WC_TOKEN,
+      WC_AES_KEY,
+      WC_CORP,
+      "0000000000000000000000000000000000000000",
+      "1409659589",
+      "263014780",
+      WC_ECHOSTR,
+    ),
+    None,
+  )
+  assert_eq(@imrelay.wecom_aes_key(WC_AES_KEY).unwrap().length(), 32)
+  assert_eq(@imrelay.wecom_aes_key("too-short"), None)
+}
+
+///|
+test "wecom crypto: pkcs7 pad and unpad at block 32" {
+  let short = @imrelay.hex_decode("414243").unwrap()
+  let padded = @imrelay.wecom_pkcs7_pad(short)
+  assert_eq(padded.length(), 32)
+  assert_eq(@imrelay.wecom_pkcs7_unpad(padded).unwrap(), short)
+  // A 32-byte-aligned payload still gains a whole block.
+  let full = @imrelay.hex_decode(
+    "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  ).unwrap()
+  assert_eq(full.length(), 32)
+  assert_eq(@imrelay.wecom_pkcs7_pad(full).length(), 64)
+  // Malformed padding: empty, zero pad, oversized pad.
+  assert_eq(@imrelay.wecom_pkcs7_unpad(@imrelay.hex_decode("").unwrap()), None)
+  assert_eq(
+    @imrelay.wecom_pkcs7_unpad(
+      @imrelay.hex_decode(
+        "0000000000000000000000000000000000000000000000000000000000000000",
+      ).unwrap(),
+    ),
+    None,
+  )
+  assert_eq(
+    @imrelay.wecom_pkcs7_unpad(
+      @imrelay.hex_decode(
+        "0000000000000000000000000000000000000000000000000000000000000021",
+      ).unwrap(),
+    ),
+    None,
+  )
+}
+
+///|
+test "wecom crypto: encrypted callback roundtrip feeds the parser" {
+  let env = @imrelay.wecom_encrypt_message(
+    WC_TOKEN,
+    WC_AES_KEY,
+    WC_CORP,
+    WC_XML_PLAIN,
+    "1729000000",
+    "nonce01",
+  ).unwrap()
+  let encrypt = @imrelay.xml_text(env, "Encrypt").unwrap()
+  let sig = @imrelay.xml_text(env, "MsgSignature").unwrap()
+  assert_eq(@imrelay.xml_text(env, "TimeStamp"), Some("1729000000"))
+  assert_eq(@imrelay.xml_text(env, "Nonce"), Some("nonce01"))
+  let decrypted = @imrelay.wecom_decrypt_message(
+    WC_TOKEN,
+    WC_AES_KEY,
+    WC_CORP,
+    sig,
+    "1729000000",
+    "nonce01",
+    encrypt,
+  )
+  assert_eq(decrypted, Some(WC_XML_PLAIN))
+  let evs = @imrelay.parse_inbound(@imrelay.Wecom, decrypted.unwrap())
+  assert_eq(evs.length(), 1)
+  assert_eq(evs[0].text, "hello imrelay")
+  assert_eq(evs[0].user_id, Some("user001"))
+  // A different timestamp no longer matches the signature.
+  assert_eq(
+    @imrelay.wecom_decrypt_message(
+      WC_TOKEN,
+      WC_AES_KEY,
+      WC_CORP,
+      sig,
+      "1729000001",
+      "nonce01",
+      encrypt,
+    ),
+    None,
+  )
+}
+
+///|
+test "wecom crypto: callback params and envelope unwrap" {
+  let p = @imrelay.wecom_callback_params(
+    "/wecom?msg_signature=s1&timestamp=123&nonce=n+1&echostr=abc%2Bd%3D%3D",
+  )
+  assert_eq(p.msg_signature, "s1")
+  assert_eq(p.timestamp, "123")
+  assert_eq(p.nonce, "n+1")
+  assert_eq(p.echostr, Some("abc+d=="))
+  assert_eq(@imrelay.wecom_callback_params("/wecom?nonce=n1").echostr, None)
+  assert_eq(@imrelay.wecom_callback_params("/wecom?echostr=").echostr, None)
+  // Relay mode (no AES key): the body passes through untouched.
+  let relay_cfg = t_pcfg(@imrelay.Wecom, [("corp_id", WC_CORP)])
+  assert_eq(
+    @imrelay.wecom_unwrap_callback(relay_cfg, WC_XML_PLAIN),
+    Ok(WC_XML_PLAIN),
+  )
+  // Crypto mode: the enveloped body decrypts.
+  let crypto_cfg = t_pcfg(@imrelay.Wecom, [
+    ("corp_id", WC_CORP),
+    ("callback_token", WC_TOKEN),
+    ("encoding_aes_key", WC_AES_KEY),
+  ])
+  let env = @imrelay.wecom_encrypt_message(
+    WC_TOKEN,
+    WC_AES_KEY,
+    WC_CORP,
+    WC_XML_PLAIN,
+    "1729000000",
+    "nonce01",
+  ).unwrap()
+  assert_eq(@imrelay.wecom_unwrap_callback(crypto_cfg, env), Ok(WC_XML_PLAIN))
+  assert_eq(
+    @imrelay.wecom_unwrap_callback(
+      crypto_cfg, "<xml><Encrypt>AAAA</Encrypt></xml>",
+    ).to_option(),
+    None,
+  )
+  assert_eq(
+    @imrelay.wecom_unwrap_callback(crypto_cfg, WC_XML_PLAIN).to_option(),
+    None,
+  )
+}
+
+///|
 test "bluebubbles: url and send payload" {
   let cfg = t_pcfg(@imrelay.Bluebubbles, [("server_url", "https://bb.local/")])
   assert_eq(@imrelay.bluebubbles_api_base(cfg), "https://bb.local/api/v1")

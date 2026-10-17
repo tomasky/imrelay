@@ -35,7 +35,7 @@ Hermes plugins map onto this codebase 1:1.
 ```bash
 moon check --target native
 moon build  --target native
-moon test   --target native        # 127 tests
+moon test   --target native        # 131 tests
 ```
 
 ## Run
@@ -99,9 +99,14 @@ Inbound webhook requests are authenticated before the event is parsed:
 | WhatsApp     | `app_secret`     | `X-Hub-Signature-256` HMAC of the raw body (required)     |
 | BlueBubbles  | `password`       | `password` query param / `x-password` header (when set)   |
 | Mattermost   | `webhook_token`  | `token` in the outgoing-webhook body (when set)           |
+| WeCom        | `callback_token` + `encoding_aes_key` | `msg_signature` SHA1 + AES-256-CBC decrypt (when set) |
 
 Missing Telegram/Slack/WhatsApp secrets **fail closed** — `POST /<platform>`
-answers `503` with the configuration hint until the secret is set.
+answers `503` with the configuration hint until the secret is set. WeCom
+callback crypto is opt-in: with `encoding_aes_key` set, `POST /wecom`
+verifies `msg_signature`, decrypts the `<Encrypt>` envelope (answering the
+GET `echostr` handshake the same way) and acks `success`; without it, bodies
+pass through unchanged (relay mode).
 
 ### Environment variables
 
@@ -121,7 +126,7 @@ The same config is available as env vars (used only when no TOML is present):
 | DingTalk                  | `DINGTALK_CLIENT_ID`, `DINGTALK_CLIENT_SECRET`, `DINGTALK_WEBHOOK_URL`, `DINGTALK_ROBOT_CODE`, `DINGTALK_HOME_CHANNEL[_NAME]`, `DINGTALK_ALLOWED_USERS` |
 | Feishu/Lark               | `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, `FEISHU_DOMAIN`, `FEISHU_HOME_CHANNEL[_NAME]`, `FEISHU_ALLOWED_USERS` |
 | WeChat (iLink)            | `WEIXIN_ACCOUNT_ID`, `WEIXIN_TOKEN`, `WEIXIN_BASE_URL`, `WEIXIN_HOME_CHANNEL[_NAME]`, `WEIXIN_ALLOWED_USERS` |
-| WeCom                     | `WECOM_CALLBACK_CORP_ID`, `WECOM_CALLBACK_CORP_SECRET`, `WECOM_CALLBACK_AGENT_ID`, `WECOM_GROUP_ROBOT_WEBHOOK`, `WECOM_HOME_CHANNEL[_NAME]`, `WECOM_ALLOWED_USERS` |
+| WeCom                     | `WECOM_CALLBACK_CORP_ID`, `WECOM_CALLBACK_CORP_SECRET`, `WECOM_CALLBACK_AGENT_ID`, `WECOM_CALLBACK_TOKEN`, `WECOM_CALLBACK_ENCODING_AES_KEY`, `WECOM_GROUP_ROBOT_WEBHOOK`, `WECOM_HOME_CHANNEL[_NAME]`, `WECOM_ALLOWED_USERS` |
 | BlueBubbles               | `BLUEBUBBLES_SERVER_URL`, `BLUEBUBBLES_PASSWORD`, `BLUEBUBBLES_HOME_CHANNEL[_NAME]`, `BLUEBUBBLES_ALLOWED_USERS` |
 | Home Assistant            | `HASS_TOKEN`, `HASS_URL` (`HASS_HOME_CHANNEL`/`HASS_HOME_CHANNEL_NAME` if configured)        |
 
@@ -131,8 +136,9 @@ The same config is available as env vars (used only when no TOML is present):
    to the matching adapter's parser, which normalizes the payload into a
    `MessageEvent`. Webhook requests are authenticated first (see the table
    above); handshakes are answered before that: Slack/Feishu `challenge`,
-   WhatsApp `hub.challenge`. Telegram and WeChat additionally long-poll,
-   and Matrix polls `/sync` (each in its own background task).
+   WhatsApp `hub.challenge`, WeCom `echostr`. Telegram and WeChat
+   additionally long-poll, and Matrix polls `/sync` (each in its own
+   background task).
 2. **Authorization** — every event must pass `allowed_users`: the platform or
    gateway allowlist must contain the user id (or `*`), unless
    `allow_all_users = true`. With no allowlist configured the gate is closed
@@ -185,7 +191,8 @@ env loaders), `dispatch.mbt` (`parse_inbound`, `send_message`,
 
 `imrelay_test.mbt` (core types / session / config) and `platforms_test.mbt`
 (payload builders, inbound parsers, Slack signature vectors, WhatsApp
-`retry_after`, dispatch routing per adapter) — 127 tests:
+`retry_after`, WeCom crypto — official `WXBizMsgCrypt` vector, dispatch
+routing per adapter) — 131 tests:
 
 ```bash
 moon test --target native
@@ -210,4 +217,7 @@ moon test --target native
 - **WhatsApp**: Cloud Business API over Graph (`graph.facebook.com`), with
   hub verification for webhook subscriptions.
 - **DingTalk / WeCom / Feishu**: keys/secret pairs for the official app APIs;
-  DingTalk and WeCom also support static inbound-robot webhooks.
+  DingTalk and WeCom also support static inbound-robot webhooks. WeCom
+  callback mode additionally implements the official `WXBizMsgCrypt`
+  `msg_signature` + AES-256-CBC verification and decryption (`callback_token`
+  + `encoding_aes_key`), plus the GET `echostr` handshake.
