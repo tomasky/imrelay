@@ -1509,6 +1509,151 @@ test "wecom crypto: callback params and envelope unwrap" {
 }
 
 ///|
+/// `openssl enc -aes-256-cbc` / `sha256sum` reference vectors for Feishu
+/// callbacks under encrypt key `test-encrypt-key-42` (fixed IV `0011…eeff`).
+const FS_ENCRYPT_KEY : String = "test-encrypt-key-42"
+
+///|
+const FS_SIGNATURE : String = "8a1bd5b9775ff68cff027eb81f243cf8178527ecf63a9b0a82e4358dc802603b"
+
+///|
+const FS_CIPHERTEXT : String = "ABEiM0RVZneImaq7zN3u/8GGigpYvl0wsIIgUlDpbuEK5Igm4scnjZE8ok9WqaRxcvLoUdtgLCC/IdDJKKhoAU3gzCtxfo20/6RmdkdD5zdKbard1kJbfjGWRo3zN7jz"
+
+///|
+const FS_PLAINTEXT : String =
+  #|{"token":"vt-test","challenge":"ch-42","type":"url_verification"}
+
+///|
+test "feishu crypto: signature vector and AES envelope interop" {
+  assert_eq(
+    @imrelay.feishu_signature(
+      "1700000000",
+      "nonce123",
+      FS_ENCRYPT_KEY,
+      "{\"encrypt\":\"abc\"}",
+    ),
+    FS_SIGNATURE,
+  )
+  assert_true(
+    @imrelay.feishu_verify_signature(
+      FS_ENCRYPT_KEY,
+      "1700000000",
+      "nonce123",
+      "{\"encrypt\":\"abc\"}",
+      FS_SIGNATURE,
+    ),
+  )
+  assert_false(
+    @imrelay.feishu_verify_signature(
+      FS_ENCRYPT_KEY,
+      "1700000000",
+      "nonce124",
+      "{\"encrypt\":\"abc\"}",
+      FS_SIGNATURE,
+    ),
+  )
+  assert_eq(
+    @imrelay.feishu_aes_key(FS_ENCRYPT_KEY),
+    @imrelay.hex_decode(
+      "180dbfb51f6fcb5942f69acbabf28ee852ff61baa0334c4b0b53665660dd3ce6",
+    ).unwrap(),
+  )
+  // The openssl reference ciphertext decrypts to the plaintext JSON.
+  assert_eq(
+    @imrelay.feishu_decrypt_envelope(FS_ENCRYPT_KEY, FS_CIPHERTEXT),
+    Some(FS_PLAINTEXT),
+  )
+  // Wrong key, truncated input and invalid base64 fail closed.
+  assert_eq(@imrelay.feishu_decrypt_envelope("other-key", FS_CIPHERTEXT), None)
+  assert_eq(@imrelay.feishu_decrypt_envelope(FS_ENCRYPT_KEY, "ABEiM0RV"), None)
+  assert_eq(@imrelay.feishu_decrypt_envelope(FS_ENCRYPT_KEY, "!!!"), None)
+  // Roundtrip through our own encryptor.
+  let enc = @imrelay.feishu_encrypt_message(FS_ENCRYPT_KEY, FS_PLAINTEXT).unwrap()
+  assert_eq(
+    @imrelay.feishu_decrypt_envelope(FS_ENCRYPT_KEY, enc),
+    Some(FS_PLAINTEXT),
+  )
+}
+
+///|
+test "feishu crypto: pkcs7 pad and unpad at block 16" {
+  let short = @imrelay.hex_decode("414243").unwrap()
+  let padded = @imrelay.feishu_pkcs7_pad(short)
+  assert_eq(padded.length(), 16)
+  assert_eq(@imrelay.feishu_pkcs7_unpad(padded).unwrap(), short)
+  // A 16-byte-aligned payload still gains a whole block.
+  let full = @imrelay.hex_decode("000102030405060708090a0b0c0d0e0f").unwrap()
+  assert_eq(full.length(), 16)
+  assert_eq(@imrelay.feishu_pkcs7_pad(full).length(), 32)
+  // Malformed padding: empty, zero padding byte, 17 (valid for WeCom's block
+  // 32, too large at block 16).
+  assert_eq(@imrelay.feishu_pkcs7_unpad(@imrelay.hex_decode("").unwrap()), None)
+  assert_eq(
+    @imrelay.feishu_pkcs7_unpad(
+      @imrelay.hex_decode("00000000000000000000000000000000").unwrap(),
+    ),
+    None,
+  )
+  assert_eq(
+    @imrelay.feishu_pkcs7_unpad(
+      @imrelay.hex_decode("00000000000000000000000000000011").unwrap(),
+    ),
+    None,
+  )
+}
+
+///|
+test "feishu crypto: token status and envelope unwrap" {
+  let relay = t_pcfg(@imrelay.Feishu, [])
+  assert_eq(@imrelay.feishu_token_status(relay, "{}"), (0, ""))
+  let token_cfg = t_pcfg(@imrelay.Feishu, [("verification_token", "vt-test")])
+  let v2 = "{\"header\":{\"token\":\"vt-test\",\"event_type\":\"im.message.receive_v1\"},\"event\":{}}"
+  assert_eq(@imrelay.feishu_token_status(token_cfg, v2), (0, ""))
+  assert_eq(
+    @imrelay.feishu_token_status(
+      token_cfg, "{\"token\":\"vt-test\",\"type\":\"event_callback\"}",
+    ),
+    (0, ""),
+  )
+  // A wrong or absent token is rejected while one is configured.
+  assert_eq(
+    @imrelay.feishu_token_status(
+      token_cfg, "{\"header\":{\"token\":\"other\"},\"event\":{}}",
+    ),
+    (401, "invalid Feishu verification token"),
+  )
+  assert_eq(
+    @imrelay.feishu_token_status(token_cfg, "{\"event\":{}}"),
+    (401, "missing Feishu verification token"),
+  )
+  assert_eq(@imrelay.feishu_body_token(v2), Some("vt-test"))
+  assert_eq(@imrelay.feishu_body_token("not json"), None)
+  // Relay mode (no encrypt key): the body passes through untouched.
+  assert_eq(@imrelay.feishu_unwrap_callback(relay, v2), Ok(v2))
+  // Encrypted mode: only a decryptable `encrypt` envelope is accepted.
+  let crypto_cfg = t_pcfg(@imrelay.Feishu, [
+    ("verification_token", "vt-test"),
+    ("encrypt_key", FS_ENCRYPT_KEY),
+  ])
+  let enc = @imrelay.feishu_encrypt_message(FS_ENCRYPT_KEY, FS_PLAINTEXT).unwrap()
+  assert_eq(
+    @imrelay.feishu_unwrap_callback(crypto_cfg, "{\"encrypt\":\"\{enc}\"}"),
+    Ok(FS_PLAINTEXT),
+  )
+  assert_eq(@imrelay.feishu_unwrap_callback(crypto_cfg, v2).to_option(), None)
+  assert_eq(
+    @imrelay.feishu_unwrap_callback(crypto_cfg, "{\"encrypt\":\"AAAA\"}").to_option(),
+    None,
+  )
+  assert_eq(
+    @imrelay.feishu_unwrap_callback(crypto_cfg, "nope").to_option(),
+    None,
+  )
+  // The handshake challenge is read from the decrypted body.
+  assert_eq(@imrelay.feishu_challenge(FS_PLAINTEXT), Some("ch-42"))
+}
+
+///|
 test "bluebubbles: url and send payload" {
   let cfg = t_pcfg(@imrelay.Bluebubbles, [("server_url", "https://bb.local/")])
   assert_eq(@imrelay.bluebubbles_api_base(cfg), "https://bb.local/api/v1")

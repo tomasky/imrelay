@@ -325,10 +325,6 @@ async fn Gateway::handle_webhook(
         )
         return
       }
-      let handled = self.handle_verification(platform, request, raw, conn)
-      if handled {
-        return
-      }
       let body = match platform {
         Wecom =>
           match wecom_unwrap_callback(pcfg, raw) {
@@ -343,7 +339,38 @@ async fn Gateway::handle_webhook(
               return
             }
           }
+        Feishu =>
+          match feishu_unwrap_callback(pcfg, raw) {
+            Ok(b) => b
+            Err(reason) => {
+              respond_text(
+                conn,
+                400,
+                "Bad Request",
+                "{\"error\":\"feishu callback rejected\",\"reason\":\"\{reason}\"}",
+              )
+              return
+            }
+          }
         _ => raw
+      }
+      if platform == Feishu {
+        // The verification token lives inside the (possibly encrypted) body,
+        // so it is checked after decryption. Fails closed while configured.
+        let (code, reason) = feishu_token_status(pcfg, body)
+        if code != 0 {
+          respond_text(
+            conn,
+            code,
+            http_reason(code),
+            "{\"error\":\"feishu callback rejected\",\"reason\":\"\{reason}\"}",
+          )
+          return
+        }
+      }
+      let handled = self.handle_verification(platform, request, body, conn)
+      if handled {
+        return
       }
       let events = parse_inbound(platform, body, cfg=pcfg)
       if platform == Wecom {
@@ -370,7 +397,8 @@ async fn Gateway::handle_webhook(
 /// payloads that carry a platform signature (`slack`, `whatsapp`, `telegram`)
 /// fail closed while no secret is configured; platforms with no signature
 /// scheme only check once a shared secret is configured. WeCom checks
-/// `msg_signature` once callback crypto (`encoding_aes_key`) is configured.
+/// `msg_signature` once callback crypto (`encoding_aes_key`) is configured,
+/// Feishu checks `X-Lark-Signature` once `encrypt_key` is configured.
 pub fn webhook_auth_status(
   platform : Platform,
   pcfg : PlatformConfig,
@@ -494,6 +522,32 @@ pub fn webhook_auth_status(
                 (401, "invalid WeCom msg_signature")
               }
           }
+        }
+      }
+    }
+    Feishu => {
+      // With `encrypt_key` configured every callback must carry a valid
+      // `X-Lark-Signature` = `sha256(timestamp + nonce + encrypt_key + body)`
+      // (raw body, before decryption); the verification token is checked
+      // later against the decrypted body. Without the key the body is
+      // plaintext and `feishu_token_status` alone gates it.
+      let encrypt_key = feishu_encrypt_key(pcfg)
+      if encrypt_key.is_empty() {
+        (0, "")
+      } else {
+        let signature = header_of(request, "X-Lark-Signature").unwrap_or("")
+        if signature.is_empty() {
+          (401, "missing Feishu X-Lark-Signature")
+        } else if feishu_verify_signature(
+            encrypt_key,
+            header_of(request, "X-Lark-Request-Timestamp").unwrap_or(""),
+            header_of(request, "X-Lark-Request-Nonce").unwrap_or(""),
+            raw,
+            signature,
+          ) {
+          (0, "")
+        } else {
+          (401, "invalid Feishu X-Lark-Signature")
         }
       }
     }

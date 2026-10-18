@@ -756,6 +756,14 @@ pub fn GatewayConfig::from_env() -> GatewayConfig {
       Some(v) => extra.set("domain", v)
       None => ()
     }
+    match env("FEISHU_VERIFICATION_TOKEN") {
+      Some(v) => extra.set("verification_token", v)
+      None => ()
+    }
+    match env("FEISHU_ENCRYPT_KEY") {
+      Some(v) => extra.set("encrypt_key", v)
+      None => ()
+    }
     cfg.platforms.set(
       Feishu,
       PlatformConfig::new(
