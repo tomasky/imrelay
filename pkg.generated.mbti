@@ -1,0 +1,880 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "kupas/imrelay"
+
+import {
+  "moonbitlang/async/http",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn api_error_message(ApiError) -> String
+
+pub fn bearer_headers(String) -> Map[String, String]
+
+pub fn bluebubbles_api_base(PlatformConfig) -> String
+
+pub async fn bluebubbles_get_chat(PlatformConfig, String) -> ChatInfo?
+
+pub fn bluebubbles_parse_event(String) -> Array[MessageEvent]
+
+pub async fn bluebubbles_ping(PlatformConfig) -> Bool
+
+pub async fn bluebubbles_send(PlatformConfig, String, String, reply_to? : String) -> SendResult
+
+pub async fn bluebubbles_send_attachment(PlatformConfig, String, String) -> SendResult
+
+pub fn bluebubbles_send_payload(String, String, String?) -> Json
+
+pub async fn bluebubbles_typing(PlatformConfig, String) -> Unit
+
+pub fn bluebubbles_url(PlatformConfig, String) -> String
+
+pub fn bluebubbles_webhook_token(String, String?) -> String?
+
+pub fn bot_headers(String) -> Map[String, String]
+
+pub fn byte_of_int(Int) -> Byte
+
+pub fn chunk_text(String, Int) -> Array[String]
+
+pub fn classify_send_error(String) -> SendErrorKind
+
+pub fn command_reply((String, String), GatewayConfig, Session) -> String?
+
+pub fn constant_time_eq(String, String) -> Bool
+
+pub fn data_url(String, Bytes) -> String
+
+pub async fn delete_empty(String, Map[String, String]) -> Result[String, ApiError]
+
+pub async fn delete_json(String, Json, Map[String, String]) -> Result[String, ApiError]
+
+pub async fn delete_message(PlatformConfig, String, String) -> SendResult
+
+pub async fn dingtalk_access_token(PlatformConfig) -> String?
+
+pub fn dingtalk_app_key(PlatformConfig) -> String?
+
+pub fn dingtalk_app_secret(PlatformConfig) -> String?
+
+pub fn dingtalk_chat_session(String) -> DingtalkChatSession?
+
+pub async fn dingtalk_download_url(PlatformConfig, String) -> String?
+
+pub fn dingtalk_group_should_process(PlatformConfig, String, String, Bool) -> Bool
+
+pub fn dingtalk_media_refs(String) -> Array[(String, String)]
+
+pub fn dingtalk_parse_callback(String, cfg? : PlatformConfig) -> Array[MessageEvent]
+
+pub async fn dingtalk_parse_callback_with_media(PlatformConfig, String) -> Array[MessageEvent]
+
+pub fn dingtalk_remember_session(String, String, Int64, String, Bool) -> Unit
+
+pub async fn dingtalk_resolve_media(PlatformConfig, String) -> Array[MediaAttachment]
+
+pub fn dingtalk_robot_code(PlatformConfig) -> String?
+
+pub fn dingtalk_robot_token(PlatformConfig) -> String?
+
+pub async fn dingtalk_send(PlatformConfig, String, String, reply_to? : String) -> SendResult
+
+pub fn dingtalk_send_payload(String, String, Bool) -> Json
+
+pub async fn dingtalk_send_webhook(PlatformConfig, String, String) -> SendResult
+
+pub fn dingtalk_session_payload(String, String, String?) -> Json
+
+pub async fn dingtalk_session_reply(String, String, title? : String, at_user_id? : String) -> SendResult
+
+pub fn dingtalk_session_webhook_url(String) -> Bool
+
+pub fn dingtalk_stream_callback_ack(String) -> Json
+
+pub fn dingtalk_stream_duplicate(String) -> Bool
+
+pub fn dingtalk_stream_echo_reply(Json, Json) -> Json
+
+pub fn dingtalk_stream_enabled(PlatformConfig) -> Bool
+
+pub fn dingtalk_stream_frame(String) -> DingtalkStreamFrame?
+
+pub async fn dingtalk_stream_open(PlatformConfig) -> Result[(String, String), ApiError]
+
+pub fn dingtalk_stream_open_payload(PlatformConfig) -> Json
+
+pub let dingtalk_stream_robot_topic : String
+
+pub fn discord_api_base(PlatformConfig) -> String
+
+pub fn discord_channel_type(Int) -> String
+
+pub fn discord_command_text(String, Json) -> String
+
+pub async fn discord_delete(PlatformConfig, String, String) -> SendResult
+
+pub async fn discord_edit(PlatformConfig, String, String, String) -> SendResult
+
+pub async fn discord_get_chat(PlatformConfig, String) -> ChatInfo?
+
+pub fn discord_media_payload(String, String, String?) -> Json
+
+pub fn discord_parse_interaction(String) -> Array[MessageEvent]
+
+pub fn discord_parse_message_event(String) -> Array[MessageEvent]
+
+pub async fn discord_react(PlatformConfig, String, String, String) -> SendResult
+
+pub fn discord_retry_after(String) -> Double?
+
+pub async fn discord_send(PlatformConfig, String, String, reply_to? : String) -> SendResult
+
+pub async fn discord_send_media(PlatformConfig, String, String, String, caption? : String) -> SendResult
+
+pub fn discord_send_payload(String, String?) -> Json
+
+pub async fn discord_typing(PlatformConfig, String) -> Unit
+
+pub async fn discord_webhook_send(String, String, username? : String) -> SendResult
+
+pub async fn edit_message(PlatformConfig, String, String, String) -> SendResult
+
+pub fn email_build_message(String, String, String, String, String, in_reply_to? : String, references? : String, date_ms? : Int64) -> String
+
+pub fn email_header_encode(String) -> String
+
+pub fn email_parse_message(String) -> MessageEvent?
+
+pub async fn email_send(PlatformConfig, String, String, String, in_reply_to? : String) -> SendResult
+
+pub fn email_smtp_config(PlatformConfig) -> SmtpConfig
+
+pub fn feishu_aes_key(String) -> Bytes
+
+pub fn feishu_api_base(PlatformConfig) -> String
+
+pub fn feishu_app_id(PlatformConfig) -> String
+
+pub fn feishu_app_secret(PlatformConfig) -> String?
+
+pub fn feishu_body_token(String) -> String?
+
+pub fn feishu_challenge(String) -> String?
+
+pub fn feishu_decrypt_envelope(String, String) -> String?
+
+pub fn feishu_encrypt_key(PlatformConfig) -> String
+
+pub fn feishu_encrypt_message(String, String) -> String?
+
+pub async fn feishu_get_chat(PlatformConfig, String) -> ChatInfo?
+
+pub fn feishu_message_text(Json) -> String
+
+pub fn feishu_parse_event(String) -> Array[MessageEvent]
+
+pub fn feishu_pkcs7_pad(Bytes) -> Bytes
+
+pub fn feishu_pkcs7_unpad(Bytes) -> Bytes?
+
+pub async fn feishu_reply(PlatformConfig, String, String) -> SendResult
+
+pub async fn feishu_send(PlatformConfig, String, String, reply_to? : String) -> SendResult
+
+pub async fn feishu_send_to(PlatformConfig, String, String, String) -> SendResult
+
+pub fn feishu_signature(String, String, String, String) -> String
+
+pub async fn feishu_tenant_token(PlatformConfig) -> String?
+
+pub fn feishu_token_status(PlatformConfig, String) -> (Int, String)
+
+pub fn feishu_unwrap_callback(PlatformConfig, String) -> Result[String, String]
+
+pub fn feishu_verification_token(PlatformConfig) -> String
+
+pub fn feishu_verify_signature(String, String, String, String, String) -> Bool
+
+pub fn format_rfc5322_date(Int64) -> String
+
+pub async fn get_bytes(String, Map[String, String]) -> Result[Bytes, ApiError]
+
+pub async fn get_chat_info(PlatformConfig, String) -> ChatInfo?
+
+pub async fn get_json(String, Map[String, String]) -> Result[Json, ApiError]
+
+pub fn graph_error_message(Json) -> String?
+
+pub fn headers_of(Map[String, String]) -> Map[@http.CaseInsensitiveString, String]
+
+pub fn hex_decode(String) -> Bytes?
+
+pub fn hex_encode(BytesView) -> String
+
+pub fn hex_lower(ArrayView[Byte]) -> String
+
+pub fn hmac_sha256_hex(String, String) -> String
+
+pub fn homeassistant_domain(PlatformConfig) -> String
+
+pub async fn homeassistant_get_chat(PlatformConfig, String) -> ChatInfo?
+
+pub fn homeassistant_parse_event(String) -> Array[MessageEvent]
+
+pub async fn homeassistant_send(PlatformConfig, String, String, reply_to? : String) -> SendResult
+
+pub fn homeassistant_send_payload(String, String?, Json?) -> Json
+
+pub fn homeassistant_service(PlatformConfig, String) -> String
+
+pub fn homeassistant_url(PlatformConfig) -> String
+
+pub fn is_chat_level_not_found(String) -> Bool
+
+pub fn is_silent_reply(String) -> Bool
+
+pub fn json_field_array(Json, String) -> Array[Json]?
+
+pub fn json_field_bool(Json, String) -> Bool?
+
+pub fn json_field_int(Json, String) -> Int?
+
+pub fn json_field_int64(Json, String) -> Int64?
+
+pub fn json_field_obj(Json, String) -> Json?
+
+pub fn json_field_string(Json, String) -> String?
+
+pub fn json_headers() -> Map[String, String]
+
+pub fn json_id(Json, String) -> String?
+
+pub fn json_obj(Array[(String, Json)]) -> Json
+
+pub async fn log_line(String) -> Unit
+
+pub fn matrix_api_base(PlatformConfig) -> String
+
+pub async fn matrix_edit(PlatformConfig, String, String, String) -> SendResult
+
+pub fn matrix_edit_payload(String, String) -> Json
+
+pub async fn matrix_get_chat(PlatformConfig, String) -> ChatInfo?
+
+pub fn matrix_headers(String) -> Map[String, String]
+
+pub fn matrix_homeserver(PlatformConfig) -> String
+
+pub fn matrix_parse_event(String, Json, self_user? : String) -> MessageEvent?
+
+pub fn matrix_parse_sync(String, self_user? : String) -> Array[MessageEvent]
+
+pub async fn matrix_react(PlatformConfig, String, String, String) -> SendResult
+
+pub fn matrix_reaction_payload(String, String) -> Json
+
+pub async fn matrix_resolve_token(PlatformConfig) -> String?
+
+pub async fn matrix_self_user(PlatformConfig, String) -> String
+
+pub async fn matrix_send(PlatformConfig, String, String, reply_to? : String, thread_id? : String) -> SendResult
+
+pub fn matrix_send_payload(String, String?) -> Json
+
+pub async fn matrix_sync(PlatformConfig, String, String, Int) -> Result[Json, ApiError]
+
+pub async fn matrix_typing(PlatformConfig, String) -> Unit
+
+pub fn mattermost_api_base(PlatformConfig) -> String
+
+pub async fn mattermost_get_chat(PlatformConfig, String) -> ChatInfo?
+
+pub fn mattermost_parse_webhook(String) -> Array[MessageEvent]
+
+pub async fn mattermost_send(PlatformConfig, String, String, reply_to? : String) -> SendResult
+
+pub fn mattermost_send_payload(String, String, String?) -> Json
+
+pub fn mattermost_webhook_token(String) -> String?
+
+pub fn md5_hex(BytesView) -> String
+
+pub fn missing_config(Platform, String) -> SendResult
+
+pub fn now_ms() -> Int64
+
+pub fn obj_with_opt(Json, String, String?) -> Json
+
+pub fn or_opt(String?, String?) -> String?
+
+pub fn parse_command(String) -> (String, String)?
+
+pub fn parse_inbound(Platform, String, cfg? : PlatformConfig) -> Array[MessageEvent]
+
+pub fn parse_ms(String?) -> Int64
+
+pub async fn patch_json(String, Json, Map[String, String]) -> Result[Json, ApiError]
+
+pub fn platform_configured(PlatformConfig) -> Bool
+
+pub async fn post_json(String, Json, Map[String, String]) -> Result[Json, ApiError]
+
+pub async fn post_octet(String, Bytes, Map[String, String]) -> Result[RawHttpResult, ApiError]
+
+pub async fn post_text(String, Json, Map[String, String]) -> Result[String, ApiError]
+
+pub async fn put_json(String, Json, Map[String, String]) -> Result[Json, ApiError]
+
+pub fn query_param(String, String) -> String?
+
+pub fn random_bytes(Int) -> Bytes
+
+pub fn random_hex(Int) -> String
+
+pub async fn request_json(@http.RequestMethod, String, String, Map[String, String]) -> Result[Json, ApiError]
+
+pub async fn request_raw(@http.RequestMethod, String, Bytes, Map[String, String]) -> Result[RawHttpResult, ApiError]
+
+pub async fn request_text(@http.RequestMethod, String, String, Map[String, String]) -> Result[String, ApiError]
+
+pub fn result_object(Result[Json, ApiError], String) -> Result[Json, SendResult]
+
+pub fn send_body_failure(String, String) -> SendResult
+
+pub async fn send_chunks(String, Int, async (String) -> SendResult) -> SendResult
+
+pub fn send_failure(String, ApiError) -> SendResult
+
+pub async fn send_media(PlatformConfig, String, String, String, caption? : String) -> SendResult
+
+pub async fn send_message(PlatformConfig, String, String, reply_to? : String, thread_id? : String, context_token? : String) -> SendResult
+
+pub fn send_ok(String?, Json) -> SendResult
+
+pub async fn send_reaction(PlatformConfig, String, String, String) -> SendResult
+
+pub async fn send_typing(PlatformConfig, String, thread_id? : String) -> Unit
+
+pub async fn send_with_retry(async () -> SendResult, max_attempts? : Int) -> SendResult
+
+pub fn signal_account(PlatformConfig) -> String?
+
+pub fn signal_http_url(PlatformConfig) -> String
+
+pub fn signal_parse_envelope(Json) -> MessageEvent?
+
+pub fn signal_parse_receive(String) -> Array[MessageEvent]
+
+pub async fn signal_send(PlatformConfig, String, String, reply_to? : String) -> SendResult
+
+pub fn signal_send_params(String, String, String) -> Json
+
+pub async fn signal_typing(PlatformConfig, String) -> Unit
+
+pub fn signal_typing_params(String, String) -> Json
+
+pub fn signal_with_target(Map[String, Json], String) -> Unit
+
+pub fn slack_api_base(PlatformConfig) -> String
+
+pub fn slack_challenge(String) -> String?
+
+pub async fn slack_delete(PlatformConfig, String, String) -> SendResult
+
+pub async fn slack_edit(PlatformConfig, String, String, String) -> SendResult
+
+pub async fn slack_get_chat(PlatformConfig, String) -> ChatInfo?
+
+pub fn slack_headers(String) -> Map[String, String]
+
+pub fn slack_parse_event(String, bot_user_id? : String) -> Array[MessageEvent]
+
+pub async fn slack_react(PlatformConfig, String, String, String) -> SendResult
+
+pub fn slack_request_verified(String, String, String, String, Int64, window_s? : Int64) -> Bool
+
+pub async fn slack_send(PlatformConfig, String, String, reply_to? : String, thread_ts? : String) -> SendResult
+
+pub fn slack_send_payload(String, String, String?) -> Json
+
+pub fn slack_signature(String, String, String) -> String
+
+pub async fn slack_typing(PlatformConfig, String, thread_ts? : String) -> Unit
+
+pub fn slack_update_payload(String, String, String) -> Json
+
+pub fn slack_verify_signature(String, String, String, String) -> Bool
+
+pub fn smtp_dot_stuff(String) -> String
+
+pub fn strip_cdata(String) -> String
+
+pub fn strip_markdown(String) -> String
+
+pub fn telegram_api_base(PlatformConfig, String) -> String
+
+pub async fn telegram_delete(PlatformConfig, String, String) -> SendResult
+
+pub async fn telegram_delete_webhook(PlatformConfig, String) -> SendResult
+
+pub async fn telegram_edit(PlatformConfig, String, String, String) -> SendResult
+
+pub async fn telegram_get_chat(PlatformConfig, String) -> ChatInfo?
+
+pub async fn telegram_get_updates(PlatformConfig, String, Int, Int) -> Array[Json]
+
+pub async fn telegram_get_updates_result(PlatformConfig, String, Int, Int) -> Result[Array[Json], ApiError]
+
+pub fn telegram_media_method(String) -> String
+
+pub fn telegram_media_payload(String, String, String, String?, String?) -> Json
+
+pub fn telegram_parse_message(Json) -> MessageEvent?
+
+pub fn telegram_parse_mode(PlatformConfig) -> String?
+
+pub fn telegram_parse_update(Json) -> Array[MessageEvent]
+
+pub fn telegram_parse_updates(Array[Json]) -> Array[MessageEvent]
+
+pub async fn telegram_react(PlatformConfig, String, String, String) -> SendResult
+
+pub async fn telegram_send(PlatformConfig, String, String, reply_to? : String, thread_id? : String) -> SendResult
+
+pub async fn telegram_send_media(PlatformConfig, String, String, String, caption? : String, reply_to? : String) -> SendResult
+
+pub fn telegram_send_payload(String, String, String?, String?, String?) -> Json
+
+pub async fn telegram_set_webhook(PlatformConfig, String, String, secret_token? : String) -> SendResult
+
+pub async fn telegram_typing(PlatformConfig, String, thread_id? : String) -> Unit
+
+pub fn telegram_typing_payload(String, String?) -> Json
+
+pub fn telegram_webhook_authorized(String, String?) -> Bool
+
+pub fn truncate(String, Int, suffix? : String) -> String
+
+pub fn url_quote(String) -> String
+
+pub fn user_allowed(GatewayConfig, PlatformConfig, String?, String) -> Bool
+
+pub fn webhook_auth_status(Platform, PlatformConfig, @http.Request, String) -> (Int, String)
+
+pub fn webhook_path(Platform) -> String
+
+pub async fn wecom_access_token(PlatformConfig) -> String?
+
+pub fn wecom_aes_key(String) -> Bytes?
+
+pub fn wecom_agent_id(PlatformConfig) -> Int?
+
+pub fn wecom_api_base(PlatformConfig) -> String
+
+pub fn wecom_callback_params(String) -> WecomCallbackParams
+
+pub fn wecom_callback_token(PlatformConfig) -> String
+
+pub fn wecom_corp_id(PlatformConfig) -> String
+
+pub fn wecom_corp_secret(PlatformConfig) -> String?
+
+pub fn wecom_decrypt_envelope(String, String, String) -> String?
+
+pub fn wecom_decrypt_message(String, String, String, String, String, String, String) -> String?
+
+pub fn wecom_encoding_aes_key(PlatformConfig) -> String
+
+pub fn wecom_encrypt_message(String, String, String, String, String, String) -> String?
+
+pub fn wecom_msg_signature(String, String, String, String) -> String
+
+pub fn wecom_parse_callback(String) -> Array[MessageEvent]
+
+pub fn wecom_pkcs7_pad(Bytes) -> Bytes
+
+pub fn wecom_pkcs7_unpad(Bytes) -> Bytes?
+
+pub async fn wecom_send(PlatformConfig, String, String, reply_to? : String) -> SendResult
+
+pub fn wecom_send_payload(String, String, Int?, Bool) -> Json
+
+pub fn wecom_unwrap_callback(PlatformConfig, String) -> Result[String, String]
+
+pub fn wecom_verify_msg_signature(String, String, String, String, String) -> Bool
+
+pub fn weixin_aes_key(String) -> Result[Bytes, String]
+
+pub fn weixin_app_id(PlatformConfig) -> String
+
+pub fn weixin_base_url(PlatformConfig) -> String
+
+pub fn weixin_base_url_default() -> String
+
+pub fn weixin_cdn_base_url(PlatformConfig) -> String
+
+pub fn weixin_cdn_host_allowed(String) -> Bool
+
+pub fn weixin_channel_version(PlatformConfig) -> String
+
+pub fn weixin_client_version(PlatformConfig) -> String
+
+pub async fn weixin_download_media(PlatformConfig, Json) -> MediaAttachment?
+
+pub async fn weixin_get_qrcode(PlatformConfig, bot_type? : String) -> Json?
+
+pub async fn weixin_get_updates(PlatformConfig, String, String) -> (Array[Json], String)
+
+pub async fn weixin_get_updates_result(PlatformConfig, String, String) -> Result[(Array[Json], String), ApiError]
+
+pub fn weixin_headers(PlatformConfig, String?) -> Map[String, String]
+
+pub fn weixin_is_session_expired(Int, Int, String) -> Bool
+
+pub fn weixin_is_stale_session(Int, Int, String) -> Bool
+
+pub fn weixin_item_text(Json) -> String
+
+pub async fn weixin_media_attachments(PlatformConfig, Json) -> Array[MediaAttachment]
+
+pub fn weixin_media_decrypt(Bytes, Bytes) -> Bytes raise
+
+pub fn weixin_media_descriptor(Json) -> (String, String, String, String)?
+
+pub fn weixin_media_download_url(String, String) -> String
+
+pub fn weixin_media_encrypt(Bytes, Bytes) -> Bytes raise
+
+pub fn weixin_media_item(Int, String, String, Int, Int, String, String) -> Json
+
+pub fn weixin_media_type_of(String) -> Int
+
+pub fn weixin_media_upload_url(String, String, String) -> String
+
+pub fn weixin_message_type_from_kinds(Array[String]) -> MessageType
+
+pub fn weixin_mime_of(String) -> String
+
+pub fn weixin_parse_message(Json) -> MessageEvent?
+
+pub fn weixin_pkcs7_pad(Bytes) -> Bytes
+
+pub fn weixin_pkcs7_unpad(Bytes) -> Bytes
+
+pub fn weixin_qr_creds(Json) -> Json?
+
+pub async fn weixin_qr_login(PlatformConfig, (String) -> Unit, (Json) -> Unit, timeout_seconds? : Int) -> Json?
+
+pub async fn weixin_qr_status(PlatformConfig, String) -> Json?
+
+pub async fn weixin_send(PlatformConfig, String, String, reply_to? : String, context_token? : String) -> SendResult
+
+pub async fn weixin_send_media(PlatformConfig, String, Bytes, String, context_token? : String) -> SendResult
+
+pub fn weixin_send_payload(PlatformConfig, String, String, String?) -> Json
+
+pub fn weixin_text_item(String) -> Json
+
+pub fn weixin_text_of(Json) -> String
+
+pub async fn weixin_typing(PlatformConfig, String) -> Unit
+
+pub async fn weixin_upload_media(PlatformConfig, String, String, Bytes, String) -> Result[Json, String]
+
+pub fn weixin_with_media(MessageEvent, Array[MediaAttachment]) -> MessageEvent
+
+pub fn whatsapp_api_base(PlatformConfig) -> String
+
+pub fn whatsapp_api_version(PlatformConfig) -> String
+
+pub fn whatsapp_hub_params(String) -> HubParams?
+
+pub async fn whatsapp_mark_read(PlatformConfig, String) -> Unit
+
+pub fn whatsapp_media_payload(String, String, String, String?) -> Json
+
+pub fn whatsapp_parse_webhook(String) -> Array[MessageEvent]
+
+pub fn whatsapp_phone_number_id(PlatformConfig) -> String?
+
+pub fn whatsapp_retry_after(String) -> Double?
+
+pub async fn whatsapp_send(PlatformConfig, String, String, reply_to? : String) -> SendResult
+
+pub async fn whatsapp_send_media(PlatformConfig, String, String, String, caption? : String) -> SendResult
+
+pub fn whatsapp_send_payload(String, String, String?) -> Json
+
+pub fn whatsapp_signature(String, String) -> String
+
+pub fn whatsapp_verify(String, String, String, String) -> String?
+
+pub fn whatsapp_verify_signature(String, String, String) -> Bool
+
+pub fn xml_text(String, String) -> String?
+
+// Errors
+pub suberror UtilsError {
+  SendRefused(String)
+  MissingConfig(String)
+  InvalidArgument(String)
+}
+
+// Types and methods
+pub(all) struct ApiError {
+  code : Int
+  body : String
+} derive(@debug.Debug)
+pub fn ApiError::http(Int, String) -> Self
+pub fn ApiError::is_transient(Self) -> Bool
+pub fn ApiError::network(String) -> Self
+pub fn ApiError::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ChatInfo {
+  name : String
+  chat_type : String
+  chat_id : String
+} derive(@debug.Debug)
+pub fn ChatInfo::to_repr(Self) -> @debug.Repr
+
+pub(all) struct DingtalkChatSession {
+  webhook : String
+  expires_at : Int64
+  sender_id : String
+  group : Bool
+} derive(@debug.Debug)
+pub fn DingtalkChatSession::to_repr(Self) -> @debug.Repr
+
+pub(all) struct DingtalkStreamFrame {
+  kind : String
+  topic : String
+  message_id : String
+  headers : Json
+  data : Json
+} derive(@debug.Debug)
+pub fn DingtalkStreamFrame::to_repr(Self) -> @debug.Repr
+
+pub(all) struct DingtalkToken {
+  token : String
+  expires_at : Int64
+} derive(@debug.Debug)
+pub fn DingtalkToken::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Gateway {
+  cfg : GatewayConfig
+  store : SessionStore
+  handler : async (MessageEvent, Session) -> String
+} derive(@debug.Debug)
+pub async fn Gateway::handle_event(Self, MessageEvent) -> Unit
+pub fn Gateway::new(GatewayConfig, async (MessageEvent, Session) -> String, max_history? : Int) -> Self
+pub async fn Gateway::run(Self) -> Unit
+pub fn Gateway::to_repr(Self) -> @debug.Repr
+
+pub(all) struct GatewayConfig {
+  platforms : Map[Platform, PlatformConfig]
+  mut name : String
+  mut host : String
+  mut port : Int
+  mut public_url : String?
+  mut allowed_users : Array[String]
+  mut allow_all_users : Bool
+} derive(@debug.Debug)
+pub fn GatewayConfig::default_config() -> Self
+pub fn GatewayConfig::enabled_platforms(Self) -> Array[Platform]
+pub fn GatewayConfig::from_env() -> Self
+pub fn GatewayConfig::from_toml(String) -> Self raise
+pub async fn GatewayConfig::from_toml_file(String) -> Self
+pub fn GatewayConfig::get(Self, Platform) -> PlatformConfig?
+pub fn GatewayConfig::has_any_allowed_users(Self) -> Bool
+pub fn GatewayConfig::load(String?) -> Self raise
+pub async fn GatewayConfig::load_default() -> Self
+pub fn GatewayConfig::to_repr(Self) -> @debug.Repr
+pub fn GatewayConfig::webhook_url(Self, String) -> String?
+
+pub(all) struct HomeChannel {
+  platform : Platform
+  chat_id : String
+  name : String
+  thread_id : String?
+} derive(@debug.Debug)
+pub fn HomeChannel::new(Platform, String, name? : String, thread_id? : String) -> Self
+pub fn HomeChannel::to_repr(Self) -> @debug.Repr
+
+pub(all) struct HubParams {
+  mode : String
+  token : String
+  challenge : String
+} derive(@debug.Debug)
+pub fn HubParams::to_repr(Self) -> @debug.Repr
+
+pub(all) struct MediaAttachment {
+  url : String
+  kind : String
+} derive(@debug.Debug)
+pub fn MediaAttachment::to_repr(Self) -> @debug.Repr
+
+pub(all) struct MessageEvent {
+  text : String
+  message_type : MessageType
+  platform : Platform
+  chat_id : String
+  user_id : String?
+  user_name : String?
+  message_id : String?
+  reply_to_message_id : String?
+  reply_to_text : String?
+  media : Array[MediaAttachment]
+  timestamp : Int64
+} derive(@debug.Debug)
+pub fn MessageEvent::get_command(Self) -> String?
+pub fn MessageEvent::is_command(Self) -> Bool
+pub fn MessageEvent::new(String, MessageType, Platform, String, user_id? : String, user_name? : String, message_id? : String, reply_to_message_id? : String, reply_to_text? : String, media? : Array[MediaAttachment], timestamp? : Int64) -> Self
+pub fn MessageEvent::to_repr(Self) -> @debug.Repr
+
+pub(all) enum MessageType {
+  Text
+  Location
+  Photo
+  Video
+  Audio
+  Voice
+  Document
+  Sticker
+  Command
+} derive(Eq, @debug.Debug)
+pub fn MessageType::equal(Self, Self) -> Bool
+pub fn MessageType::not_equal(Self, Self) -> Bool
+pub fn MessageType::to_repr(Self) -> @debug.Repr
+pub fn MessageType::value(Self) -> String
+
+pub(all) enum Platform {
+  Telegram
+  Discord
+  Slack
+  Whatsapp
+  Signal
+  Email
+  Mattermost
+  Matrix
+  Dingtalk
+  Feishu
+  Weixin
+  Wecom
+  Bluebubbles
+  HomeAssistant
+} derive(Eq, Hash, @debug.Debug)
+pub fn Platform::equal(Self, Self) -> Bool
+pub fn Platform::hash(Self) -> Int
+pub fn Platform::hash_combine(Self, Hasher) -> Unit
+pub fn Platform::max_message_length(Self) -> Int
+pub fn Platform::name(Self) -> String
+pub fn Platform::not_equal(Self, Self) -> Bool
+pub fn Platform::of_value(String) -> Self?
+pub fn Platform::to_repr(Self) -> @debug.Repr
+pub fn Platform::value(Self) -> String
+
+pub(all) struct PlatformConfig {
+  platform : Platform
+  enabled : Bool
+  token : String?
+  api_key : String?
+  extra : Map[String, String]
+  home_channel : HomeChannel?
+  allowed_users : Array[String]
+} derive(@debug.Debug)
+pub fn PlatformConfig::api_key_of(Self) -> String?
+pub fn PlatformConfig::bearer(Self) -> String?
+pub fn PlatformConfig::extra_bool(Self, String, Bool) -> Bool
+pub fn PlatformConfig::extra_first(Self, Array[String]) -> String?
+pub fn PlatformConfig::extra_int(Self, String, Int) -> Int
+pub fn PlatformConfig::extra_str(Self, String, String) -> String
+pub fn PlatformConfig::get(Self, String) -> String?
+pub fn PlatformConfig::get_or(Self, String, String) -> String
+pub fn PlatformConfig::new(Platform, enabled? : Bool, token? : String, api_key? : String, extra? : Map[String, String], home_channel? : HomeChannel, allowed_users? : Array[String]) -> Self
+pub fn PlatformConfig::require(Self, String, String) -> String raise
+pub fn PlatformConfig::to_repr(Self) -> @debug.Repr
+pub fn PlatformConfig::token_of(Self) -> String?
+
+pub(all) struct RawHttpResult {
+  code : Int
+  headers : Map[@http.CaseInsensitiveString, String]
+  body_bytes : Bytes
+} derive(@debug.Debug)
+pub fn RawHttpResult::to_repr(Self) -> @debug.Repr
+
+pub(all) enum SendErrorKind {
+  TooLong
+  BadFormat
+  Forbidden
+  NotFound
+  RateLimited
+  Transient
+  Unknown
+} derive(Eq, @debug.Debug)
+pub fn SendErrorKind::equal(Self, Self) -> Bool
+pub fn SendErrorKind::not_equal(Self, Self) -> Bool
+pub fn SendErrorKind::to_repr(Self) -> @debug.Repr
+pub fn SendErrorKind::value(Self) -> String
+
+pub(all) struct SendResult {
+  success : Bool
+  message_id : String?
+  error : String?
+  retryable : Bool
+  retry_after : Double?
+  error_kind : SendErrorKind?
+  raw : String?
+} derive(@debug.Debug)
+pub fn SendResult::failed(String, retryable? : Bool, retry_after? : Double, kind? : SendErrorKind, raw? : String) -> Self
+pub fn SendResult::ok(message_id? : String, raw? : String) -> Self
+pub fn SendResult::to_repr(Self) -> @debug.Repr
+pub fn SendResult::unwrap(Self) -> String raise
+
+pub(all) struct Session {
+  platform : Platform
+  chat_id : String
+  history : Array[(String, String)]
+  state : Map[String, String]
+  max_history : Int
+} derive(@debug.Debug)
+pub fn Session::context_token(Self) -> String?
+pub fn Session::last_message_id(Self) -> String?
+pub fn Session::messages_json(Self) -> Json
+pub fn Session::push(Self, String, String) -> Unit
+pub fn Session::reset(Self) -> Unit
+pub fn Session::set_context_token(Self, String) -> Unit
+pub fn Session::set_last_message_id(Self, String) -> Unit
+pub fn Session::set_thread_id(Self, String) -> Unit
+pub fn Session::thread_id(Self) -> String?
+pub fn Session::to_repr(Self) -> @debug.Repr
+
+pub(all) struct SessionStore {
+  sessions : Map[String, Session]
+  max_history : Int
+} derive(@debug.Debug)
+pub fn SessionStore::len(Self) -> Int
+pub fn SessionStore::new(max_history? : Int) -> Self
+pub fn SessionStore::session(Self, Platform, String) -> Session
+pub fn SessionStore::to_repr(Self) -> @debug.Repr
+
+pub(all) struct SmtpConfig {
+  host : String
+  port : Int
+  user : String
+  password : String
+  tls : String
+  from : String
+  from_name : String
+} derive(@debug.Debug)
+pub fn SmtpConfig::to_repr(Self) -> @debug.Repr
+
+pub(all) struct WecomCallbackParams {
+  msg_signature : String
+  timestamp : String
+  nonce : String
+  echostr : String?
+}
+
+// Type aliases
+
+// Traits
