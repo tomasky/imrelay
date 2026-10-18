@@ -372,7 +372,12 @@ async fn Gateway::handle_webhook(
       if handled {
         return
       }
-      let events = parse_inbound(platform, body, cfg=pcfg)
+      let events = if platform == Dingtalk {
+        // Robot callbacks may carry media; resolve their download codes first.
+        dingtalk_parse_callback_with_media(pcfg, body)
+      } else {
+        parse_inbound(platform, body, cfg=pcfg)
+      }
       if platform == Wecom {
         // WeCom expects the literal `success` text (or an empty body).
         respond_text(conn, 200, "OK", "success")
@@ -893,7 +898,7 @@ async fn poll_dingtalk_stream(gw : Gateway, pcfg : PlatformConfig) -> Unit {
                           String(s) => s
                           other => other.stringify()
                         }
-                        for ev in dingtalk_parse_callback(data, cfg=pcfg) {
+                        for ev in dingtalk_parse_callback_with_media(pcfg, data) {
                           gw.handle_event(ev) catch {
                             e =>
                               log_line(

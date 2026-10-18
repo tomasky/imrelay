@@ -1036,6 +1036,175 @@ test "dingtalk: parse remembers the session webhook" {
 }
 
 ///|
+/// Media-carrying callback fixtures (raw robot payloads: media arrives as
+/// `content.downloadCode`; `richText` parts may carry several pictures).
+const DT_MEDIA_PICTURE : String =
+  #|{"conversationId":"cid-media","msgId":"m-pic","senderId":"user1","conversationType":"1","msgtype":"picture","content":{"downloadCode":"dc-img-1"}}
+
+///|
+const DT_MEDIA_RICHTEXT : String =
+  #|{"conversationId":"cid-media","msgId":"m-rich","senderId":"user1","conversationType":"1","msgtype":"richText","content":{"richText":[{"type":"text","text":"look"},{"type":"picture","downloadCode":"dc-r1"},{"type":"picture","downloadCode":"dc-r1"},{"type":"picture","downloadCode":"dc-r2"}]}}
+
+///|
+const DT_MEDIA_FILE : String =
+  #|{"conversationId":"cid-media","msgId":"m-file","senderId":"user1","conversationType":"1","msgtype":"file","content":{"fileName":"report.pdf","downloadCode":"dc-file-1"}}
+
+///|
+const DT_MEDIA_VIDEO : String =
+  #|{"conversationId":"cid-media","msgId":"m-vid","senderId":"user1","conversationType":"1","msgtype":"video","content":{"downloadCode":"dc-vid-1"}}
+
+///|
+const DT_MEDIA_AUDIO : String =
+  #|{"conversationId":"cid-media","msgId":"m-aud","senderId":"user1","conversationType":"1","msgtype":"audio","content":{"downloadCode":"dc-aud-1","recognition":"hello voice"}}
+
+///|
+test "dingtalk media: download-code extraction and type promotion" {
+  let refs = @imrelay.dingtalk_media_refs(DT_MEDIA_PICTURE)
+  assert_eq(refs.length(), 1)
+  assert_eq(refs[0].0, "dc-img-1")
+  assert_eq(refs[0].1, "photo")
+  // Rich text: every picture code in order, duplicates collapsed.
+  let rich = @imrelay.dingtalk_media_refs(DT_MEDIA_RICHTEXT)
+  assert_eq(rich.length(), 2)
+  assert_eq(rich[0].0, "dc-r1")
+  assert_eq(rich[1].0, "dc-r2")
+  assert_eq(rich[1].1, "photo")
+  let file = @imrelay.dingtalk_media_refs(DT_MEDIA_FILE)
+  assert_eq(file[0].1, "document")
+  assert_eq(@imrelay.dingtalk_media_refs(DT_MEDIA_VIDEO)[0].1, "video")
+  // Voice notes carry recognition text; Hermes leaves their media unresolved.
+  assert_eq(@imrelay.dingtalk_media_refs(DT_MEDIA_AUDIO).length(), 0)
+  assert_eq(@imrelay.dingtalk_media_refs("not json").length(), 0)
+  // Message types are promoted from `msgtype`.
+  assert_eq(
+    @imrelay.dingtalk_parse_callback(DT_MEDIA_PICTURE)[0].message_type,
+    @imrelay.Photo,
+  )
+  assert_eq(
+    @imrelay.dingtalk_parse_callback(DT_MEDIA_RICHTEXT)[0].message_type,
+    @imrelay.Photo,
+  )
+  assert_eq(
+    @imrelay.dingtalk_parse_callback(DT_MEDIA_FILE)[0].message_type,
+    @imrelay.Document,
+  )
+  assert_eq(
+    @imrelay.dingtalk_parse_callback(DT_MEDIA_VIDEO)[0].message_type,
+    @imrelay.Video,
+  )
+  assert_eq(
+    @imrelay.dingtalk_parse_callback(DT_MEDIA_AUDIO)[0].message_type,
+    @imrelay.Voice,
+  )
+  // Media URLs still need the resolver; plain text and commands are unchanged.
+  assert_eq(
+    @imrelay.dingtalk_parse_callback(DT_MEDIA_PICTURE)[0].media.length(),
+    0,
+  )
+  assert_eq(
+    @imrelay.dingtalk_parse_callback(DT_CB)[0].message_type,
+    @imrelay.Text,
+  )
+  assert_eq(
+    @imrelay.dingtalk_parse_callback(DT_MD_CB)[0].message_type,
+    @imrelay.Text,
+  )
+}
+
+///|
+/// Mock DingTalk API: OAuth token endpoint plus the media-download endpoint,
+/// which echoes the received `downloadCode`/`robotCode` into the URL.
+async fn t_dingtalk_media_server(group : @async.TaskGroup[Unit]) -> Int32 {
+  let server = @http.Server(@socket.Addr::parse("127.0.0.1:0"), reuse_addr=true)
+  let port = server.addr.port()
+  group.spawn_bg(no_wait=true) <| () => {
+    server.run_forever() <| ((request, body, conn) => {
+      let raw = body.read_all().text()
+      let (code, payload) = match request.path {
+        "/v1.0/oauth2/accessToken" =>
+          (200, "{\"accessToken\":\"tk-media\",\"expireIn\":7200}")
+        "/v1.0/robot/messageFiles/download" => {
+          let j = @json.parse(raw) catch { _ => Json::null() }
+          let dc = @imrelay.json_field_string(j, "downloadCode").unwrap_or("")
+          let robot = @imrelay.json_field_string(j, "robotCode").unwrap_or("")
+          (
+            200,
+            "{\"downloadUrl\":\"http://127.0.0.1:\{port}/dl/\{dc}?robot=\{robot}\"}",
+          )
+        }
+        _ => (404, "{}")
+      }
+      conn.send_response(code, "OK", extra_headers={
+        "Content-Type": "application/json",
+      })
+      conn.write_string(payload)
+      conn.end_response()
+    })
+  }
+  port
+}
+
+///|
+async test "dingtalk media: download codes resolve through the API" {
+  @async.with_task_group() <| group => {
+    let port = t_dingtalk_media_server(group)
+    let cfg = t_pcfg(@imrelay.Dingtalk, [
+      ("client_id", "cid-media"),
+      ("client_secret", "csecret"),
+      ("robot_code", "robot-media"),
+      ("api_base", "http://127.0.0.1:\{port}"),
+    ])
+    let media = @imrelay.dingtalk_resolve_media(cfg, DT_MEDIA_PICTURE)
+    assert_eq(media.length(), 1)
+    assert_eq(
+      media[0].url,
+      "http://127.0.0.1:\{port}/dl/dc-img-1?robot=robot-media",
+    )
+    assert_eq(media[0].kind, "photo")
+    // The parser attaches the resolved URL to the event.
+    let evs = @imrelay.dingtalk_parse_callback_with_media(cfg, DT_MEDIA_PICTURE)
+    assert_eq(evs.length(), 1)
+    assert_eq(evs[0].message_type, @imrelay.Photo)
+    assert_eq(evs[0].media.length(), 1)
+    assert_eq(evs[0].media[0].url, media[0].url)
+    // Rich text resolves every picture code in order.
+    let rich = @imrelay.dingtalk_resolve_media(cfg, DT_MEDIA_RICHTEXT)
+    assert_eq(rich.length(), 2)
+    assert_true(rich[0].url.contains("dc-r1"))
+    assert_true(rich[1].url.contains("dc-r2"))
+    assert_eq(rich[1].kind, "photo")
+    // Voice notes stay unresolved.
+    assert_eq(@imrelay.dingtalk_resolve_media(cfg, DT_MEDIA_AUDIO).length(), 0)
+    // Without an explicit robot_code the app key is used (DingTalk
+    // convention for self-built robots).
+    let app_robot = t_pcfg(@imrelay.Dingtalk, [
+      ("client_id", "cid-approbot"),
+      ("client_secret", "csecret"),
+      ("api_base", "http://127.0.0.1:\{port}"),
+    ])
+    let media2 = @imrelay.dingtalk_resolve_media(app_robot, DT_MEDIA_PICTURE)
+    assert_eq(media2.length(), 1)
+    assert_true(media2[0].url.contains("robot=cid-approbot"))
+    // Without app credentials the resolver makes no API call, and parsing
+    // still yields the event (just without media URLs).
+    let no_creds = t_pcfg(@imrelay.Dingtalk, [
+      ("robot_code", "robot-media"),
+      ("api_base", "http://127.0.0.1:\{port}"),
+    ])
+    assert_eq(
+      @imrelay.dingtalk_resolve_media(no_creds, DT_MEDIA_PICTURE).length(),
+      0,
+    )
+    let evs2 = @imrelay.dingtalk_parse_callback_with_media(
+      no_creds,
+      DT_MEDIA_PICTURE,
+    )
+    assert_eq(evs2.length(), 1)
+    assert_eq(evs2[0].media.length(), 0)
+  }
+}
+
+///|
 test "dingtalk: group trigger rules" {
   let cfg = t_pcfg(@imrelay.Dingtalk, [
     ("require_mention", "true"),

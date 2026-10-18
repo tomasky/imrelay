@@ -527,8 +527,9 @@ pub fn dingtalk_parse_callback(
   if chat_id.is_empty() {
     return out
   }
-  let text = match json_field_string(j, "msgtype") {
-    Some("markdown") =>
+  let msgtype = json_field_string(j, "msgtype").unwrap_or("")
+  let text = match msgtype {
+    "markdown" =>
       match json_field_obj(j, "markdown") {
         Some(m) => json_field_string(m, "text").unwrap_or("")
         None => ""
@@ -576,7 +577,11 @@ pub fn dingtalk_parse_callback(
       }
     None => ()
   }
-  let mtype = if text.has_prefix("/") { Command } else { Text }
+  let mtype = if text.has_prefix("/") {
+    Command
+  } else {
+    dingtalk_message_type(j)
+  }
   out.push(
     MessageEvent::new(
       text,
@@ -591,6 +596,192 @@ pub fn dingtalk_parse_callback(
       timestamp=now_ms(),
     ),
   )
+  out
+}
+
+// --- Inbound media ---------------------------------------------------------
+//
+// DingTalk robot messages carry media as `downloadCode`s (Hermes
+// `extract_media` / `collect_download_codes`); each resolves to a
+// short-lived URL through `POST /v1.0/robot/messageFiles/download` with the
+// robot code. Voice notes are skipped like Hermes — their `recognition`
+// text carries the payload — and the resolution is best-effort per code.
+
+///|
+/// `(downloadCode, kind)` media references of one callback body, kinds in
+/// `MediaAttachment` vocabulary (`photo`/`video`/`voice`/`document`).
+pub fn dingtalk_media_refs(body : String) -> Array[(String, String)] {
+  let j = @json.parse(body) catch { _ => return [] }
+  dingtalk_media_refs_of(j)
+}
+
+///|
+fn dingtalk_push_media_ref(
+  out : Array[(String, String)],
+  code : String,
+  kind : String,
+) -> Unit {
+  if code.is_empty() {
+    return
+  }
+  for kv in out {
+    if kv.0 == code {
+      return
+    }
+  }
+  out.push((code, kind))
+}
+
+///|
+fn dingtalk_media_refs_of(j : Json) -> Array[(String, String)] {
+  let out : Array[(String, String)] = []
+  let content = json_field_obj(j, "content").unwrap_or(Json::null())
+  match json_field_string(j, "msgtype").unwrap_or("") {
+    "picture" | "image" =>
+      dingtalk_push_media_ref(
+        out,
+        json_field_string(content, "downloadCode").unwrap_or(""),
+        "photo",
+      )
+    "video" =>
+      dingtalk_push_media_ref(
+        out,
+        json_field_string(content, "downloadCode").unwrap_or(""),
+        "video",
+      )
+    "file" =>
+      dingtalk_push_media_ref(
+        out,
+        json_field_string(content, "downloadCode").unwrap_or(""),
+        "document",
+      )
+    "richText" =>
+      for part in json_field_array(content, "richText").unwrap_or([]) {
+        let code = or_opt(
+          json_field_string(part, "downloadCode"),
+          json_field_string(part, "pictureDownloadCode"),
+        ).unwrap_or("")
+        let kind = match json_field_string(part, "type").unwrap_or("") {
+          "video" => "video"
+          "voice" => "voice"
+          "file" => "document"
+          _ => "photo"
+        }
+        dingtalk_push_media_ref(out, code, kind)
+      }
+    _ => ()
+  }
+  out
+}
+
+///|
+/// `MessageType` promoted from a callback's `msgtype` (Hermes
+/// `extract_media`): picture/image → `Photo`, video → `Video`, the audio
+/// voice note → `Voice`, file → `Document`; rich text takes the kind of its
+/// first media part, everything else stays `Text`.
+fn dingtalk_message_type(j : Json) -> MessageType {
+  match json_field_string(j, "msgtype").unwrap_or("") {
+    "picture" | "image" => Photo
+    "video" => Video
+    "audio" => Voice
+    "file" => Document
+    "richText" => {
+      let refs = dingtalk_media_refs_of(j)
+      if refs.is_empty() {
+        Text
+      } else {
+        match refs[0].1 {
+          "video" => Video
+          "voice" => Voice
+          "document" => Document
+          _ => Photo
+        }
+      }
+    }
+    _ => Text
+  }
+}
+
+///|
+/// Resolve one `downloadCode` to a temporary download URL through
+/// `POST /v1.0/robot/messageFiles/download`. `None` without app credentials
+/// or robot code, or when DingTalk answers without a `downloadUrl`.
+pub async fn dingtalk_download_url(
+  cfg : PlatformConfig,
+  code : String,
+) -> String? {
+  let robot = match dingtalk_robot_code(cfg) {
+    Some(r) => r
+    None => return None
+  }
+  let token = match dingtalk_access_token(cfg) {
+    Some(t) => t
+    None => return None
+  }
+  let api_base = cfg.extra_str("api_base", "https://api.dingtalk.com")
+  let url = "\{api_base}/v1.0/robot/messageFiles/download"
+  let headers = json_headers()
+  headers.set("x-acs-dingtalk-access-token", token)
+  let payload = json_obj([
+    ("downloadCode", Json::string(code)),
+    ("robotCode", Json::string(robot)),
+  ])
+  match post_json(url, payload, headers) {
+    Err(_) => None
+    Ok(j) => json_field_string(j, "downloadUrl")
+  }
+}
+
+///|
+/// Resolve every media reference of a callback body into `MediaAttachment`s;
+/// individual failures are skipped so one bad code cannot drop the message.
+pub async fn dingtalk_resolve_media(
+  cfg : PlatformConfig,
+  body : String,
+) -> Array[MediaAttachment] {
+  let out : Array[MediaAttachment] = []
+  for kv in dingtalk_media_refs(body) {
+    match dingtalk_download_url(cfg, kv.0) {
+      Some(url) => out.push({ url, kind: kv.1, })
+      None => ()
+    }
+  }
+  out
+}
+
+///|
+/// Parse a DingTalk callback and attach resolved media URLs (one extra API
+/// call per media-carrying message; no call when the message has no media).
+pub async fn dingtalk_parse_callback_with_media(
+  cfg : PlatformConfig,
+  body : String,
+) -> Array[MessageEvent] {
+  let events = dingtalk_parse_callback(body, cfg~)
+  if events.is_empty() {
+    return events
+  }
+  let media = dingtalk_resolve_media(cfg, body)
+  if media.is_empty() {
+    return events
+  }
+  let out : Array[MessageEvent] = []
+  for ev in events {
+    out.push(
+      MessageEvent::new(
+        ev.text,
+        ev.message_type,
+        ev.platform,
+        ev.chat_id,
+        user_id?=ev.user_id,
+        user_name?=ev.user_name,
+        message_id?=ev.message_id,
+        reply_to_message_id?=ev.reply_to_message_id,
+        reply_to_text?=ev.reply_to_text,
+        media~,
+        timestamp=ev.timestamp,
+      ),
+    )
+  }
   out
 }
 

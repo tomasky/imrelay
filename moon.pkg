@@ -22,6 +22,9 @@ import {
 
 import {
   "moonbitlang/core/json",
+  "moonbitlang/async",
+  "moonbitlang/async/http",
+  "moonbitlang/async/socket",
 } for "test"
 
 supported_targets = "+native"

@@ -23,7 +23,7 @@ Hermes plugins map onto this codebase 1:1.
 | Email (SMTP/IMAP)         | `email`        | parsed raw messages            | RFC 5322 messages over SMTP (STARTTLS/SSL)                |
 | Mattermost                | `mattermost`   | outgoing webhook               | posts via v4 API                                          |
 | Matrix                    | `matrix`       | `/sync` polling                | text / edit / reactions / typing (`m.*` events)           |
-| DingTalk                  | `dingtalk`     | Stream Mode + robot callback   | session-webhook markdown / app messages / group robot     |
+| DingTalk                  | `dingtalk`     | Stream Mode + robot callback   | session-webhook markdown / app messages / group robot / inbound media |
 | Feishu / Lark             | `feishu`       | event webhook + challenge      | app messages                                              |
 | WeChat (iLink Bot API)  | `weixin`       | long-poll                      | iLink bot messages                                        |
 | WeCom (Enterprise WeChat) | `wecom`        | callback (XML + JSON)          | app messages / group-robot webhook, markdown              |
@@ -35,7 +35,7 @@ Hermes plugins map onto this codebase 1:1.
 ```bash
 moon check --target native
 moon build  --target native
-moon test   --target native        # 139 tests
+moon test   --target native        # 141 tests
 ```
 
 ## Run
@@ -209,7 +209,7 @@ env loaders), `dispatch.mbt` (`parse_inbound`, `send_message`,
 (payload builders, inbound parsers, Slack signature vectors, WhatsApp
 `retry_after`, WeCom crypto — official `WXBizMsgCrypt` vector, DingTalk
 stream frames / session-webhook cache / group gating, dispatch routing per
-adapter) — 139 tests:
+adapter) — 141 tests:
 
 ```bash
 moon test --target native
@@ -245,6 +245,12 @@ moon test --target native
   a 5-minute expiry margin, `@`-ing the sender back in group chats), falling
   back to the app-robot API (`robot/oToMessages/batchSend`) or a static group
   robot webhook (`webhook_url`, or `webhook_base` + `access_token`).
+  Inbound media rides `downloadCode`s like Hermes: picture/rich-text/
+  file/video payloads are promoted to their `MessageType` and each code is
+  resolved through `POST v1.0/robot/messageFiles/download` (robot code, or
+  the app key when `robot_code` is unset) into `MessageEvent.media` with the
+  matching kind — voice notes stay unresolved so their `recognition` text is
+  not shadowed, and one bad code never drops the message.
   Group trigger rules match Hermes: `require_mention` (default `false`),
   `free_response_chats` (comma-separated chat ids that never need a mention),
   `mention_patterns` (JSON array or CSV; case-insensitive substring wake
