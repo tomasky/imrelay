@@ -59,6 +59,19 @@ pub fn json_field_int(obj : Json, key : String) -> Int32? {
 }
 
 ///|
+/// Read a large numeric field (epoch-milliseconds) as `Int64`.
+pub fn json_field_int64(obj : Json, key : String) -> Int64? {
+  match obj {
+    Object(m) =>
+      match m.get(key) {
+        Some(Number(n, ..)) => Some(n.to_int64())
+        _ => None
+      }
+    _ => None
+  }
+}
+
+///|
 /// Read a boolean field from a JSON object.
 pub fn json_field_bool(obj : Json, key : String) -> Bool? {
   match obj {

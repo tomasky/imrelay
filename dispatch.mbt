@@ -174,8 +174,14 @@ pub async fn get_chat_info(cfg : PlatformConfig, chat_id : String) -> ChatInfo? 
 
 ///|
 /// Parse a webhook body into normalized events for ``platform``.
-/// Unknown platforms and malformed bodies yield an empty array.
-pub fn parse_inbound(platform : Platform, body : String) -> Array[MessageEvent] {
+/// Unknown platforms and malformed bodies yield an empty array. ``cfg`` is
+/// only needed by platforms with config-dependent inbound rules (DingTalk
+/// group mention gating).
+pub fn parse_inbound(
+  platform : Platform,
+  body : String,
+  cfg? : PlatformConfig,
+) -> Array[MessageEvent] {
   match platform {
     Telegram => {
       let j = @json.parse(body) catch { _ => return [] }
@@ -198,7 +204,7 @@ pub fn parse_inbound(platform : Platform, body : String) -> Array[MessageEvent] 
       }
     Mattermost => mattermost_parse_webhook(body)
     Matrix => matrix_parse_sync(body)
-    Dingtalk => dingtalk_parse_callback(body)
+    Dingtalk => dingtalk_parse_callback(body, cfg?)
     Feishu => feishu_parse_event(body)
     Weixin => {
       let j = @json.parse(body) catch { _ => return [] }

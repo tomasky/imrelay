@@ -66,3 +66,12 @@ pub extend HubParams with @debug.Debug::{to_repr}
 
 ///|
 pub extend RawHttpResult with @debug.Debug::{to_repr}
+
+///|
+pub extend DingtalkToken with @debug.Debug::{to_repr}
+
+///|
+pub extend DingtalkChatSession with @debug.Debug::{to_repr}
+
+///|
+pub extend DingtalkStreamFrame with @debug.Debug::{to_repr}

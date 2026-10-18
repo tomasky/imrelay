@@ -696,17 +696,41 @@ pub fn GatewayConfig::from_env() -> GatewayConfig {
       ),
     )
   }
-  // DingTalk (app key/secret; optional static robot webhook, robot code)
-  if all_env(["DINGTALK_CLIENT_ID", "DINGTALK_CLIENT_SECRET"]) {
+  // DingTalk (app key/secret for Stream Mode + app-robot API; a static group
+  // robot webhook works on its own)
+  if all_env(["DINGTALK_CLIENT_ID", "DINGTALK_CLIENT_SECRET"]) ||
+    env_truthy(["DINGTALK_WEBHOOK_URL"]) {
     let extra : Map[String, String] = Map([])
-    extra.set("client_id", env("DINGTALK_CLIENT_ID").unwrap_or(""))
-    extra.set("client_secret", env("DINGTALK_CLIENT_SECRET").unwrap_or(""))
+    match env("DINGTALK_CLIENT_ID") {
+      Some(v) => extra.set("client_id", v)
+      None => ()
+    }
+    match env("DINGTALK_CLIENT_SECRET") {
+      Some(v) => extra.set("client_secret", v)
+      None => ()
+    }
     match env("DINGTALK_WEBHOOK_URL") {
       Some(v) => extra.set("webhook_url", v)
       None => ()
     }
     match env("DINGTALK_ROBOT_CODE") {
       Some(v) => extra.set("robot_code", v)
+      None => ()
+    }
+    match env("DINGTALK_STREAM") {
+      Some(v) => extra.set("stream", v)
+      None => ()
+    }
+    match env("DINGTALK_REQUIRE_MENTION") {
+      Some(v) => extra.set("require_mention", v)
+      None => ()
+    }
+    match env("DINGTALK_FREE_RESPONSE_CHATS") {
+      Some(v) => extra.set("free_response_chats", v)
+      None => ()
+    }
+    match env("DINGTALK_MENTION_PATTERNS") {
+      Some(v) => extra.set("mention_patterns", v)
       None => ()
     }
     cfg.platforms.set(

@@ -195,6 +195,14 @@ pub async fn Gateway::run(self : Gateway) -> Unit {
               None => ()
             }
           }
+          if platform == Dingtalk {
+            // Stream Mode: no public callback URL needed. Needs the app
+            // key/secret; `[dingtalk.extra] stream = false` opts out.
+            if dingtalk_stream_enabled(pcfg) {
+              let gw = self
+              group.spawn_bg(no_wait=true, () => poll_dingtalk_stream(gw, pcfg))
+            }
+          }
           if platform == Matrix {
             if pcfg.extra_bool("polling", true) &&
               !matrix_homeserver(pcfg).is_empty() {
@@ -337,7 +345,7 @@ async fn Gateway::handle_webhook(
           }
         _ => raw
       }
-      let events = parse_inbound(platform, body)
+      let events = parse_inbound(platform, body, cfg=pcfg)
       if platform == Wecom {
         // WeCom expects the literal `success` text (or an empty body).
         respond_text(conn, 200, "OK", "success")
@@ -761,6 +769,100 @@ async fn poll_matrix(
       Err(e) => {
         log_line("[imrelay] matrix sync failed: \{api_error_message(e)}")
         @async.sleep(2000)
+      }
+    }
+  }
+}
+
+///|
+/// DingTalk Stream Mode: open a WebSocket long-connection, ack `CALLBACK`
+/// frames, echo `SYSTEM` pings and reconnect with exponential backoff.
+async fn poll_dingtalk_stream(gw : Gateway, pcfg : PlatformConfig) -> Unit {
+  let mut delay : Int64 = 1000L
+  let backoff = (d : Int64) => if d >= 60000L { 60000L } else { d * 2L }
+  while true {
+    match dingtalk_stream_open(pcfg) {
+      Err(e) => {
+        log_line(
+          "[imrelay] dingtalk: stream open failed (\{api_error_message(e)}); retrying in \{delay} ms",
+        )
+        @async.sleep(delay.to_int())
+        delay = backoff(delay)
+      }
+      Ok((endpoint, ticket)) => {
+        let url = "\{endpoint}?ticket=\{url_quote(ticket)}"
+        let opened = Some(@websocket.connect(url)) catch {
+          e => {
+            log_line(
+              "[imrelay] dingtalk: stream connect failed: \{e}; retrying in \{delay} ms",
+            )
+            None
+          }
+        }
+        match opened {
+          None => {
+            @async.sleep(delay.to_int())
+            delay = backoff(delay)
+          }
+          Some(conn) => {
+            log_line("[imrelay] dingtalk: stream connected")
+            delay = 1000L
+            try {
+              for ;; {
+                let message = conn.recv()
+                let raw = message.read_all().text()
+                match dingtalk_stream_frame(raw) {
+                  None =>
+                    log_line(
+                      "[imrelay] dingtalk: ignoring a malformed stream frame",
+                    )
+                  Some(frame) =>
+                    if frame.kind == "SYSTEM" {
+                      if frame.topic == "ping" || frame.topic == "disconnect" {
+                        conn.send_text(
+                          dingtalk_stream_echo_reply(frame.headers, frame.data).stringify(),
+                        )
+                        if frame.topic == "disconnect" {
+                          break
+                        }
+                      }
+                    } else if frame.kind == "CALLBACK" {
+                      // Ack first (the server retries after 60 s), then
+                      // dispatch; redeliveries are dropped by frame id.
+                      if !frame.message_id.is_empty() {
+                        conn.send_text(
+                          dingtalk_stream_callback_ack(frame.message_id).stringify(),
+                        )
+                      }
+                      if !dingtalk_stream_duplicate(frame.message_id) {
+                        let data = match frame.data {
+                          String(s) => s
+                          other => other.stringify()
+                        }
+                        for ev in dingtalk_parse_callback(data, cfg=pcfg) {
+                          gw.handle_event(ev) catch {
+                            e =>
+                              log_line(
+                                "[imrelay] dingtalk: handling a stream message failed: \{e}",
+                              )
+                          }
+                        }
+                      }
+                    } else if frame.kind != "" && !frame.message_id.is_empty() {
+                      // Unknown callback/event type: ack so it is not retried.
+                      conn.send_text(
+                        dingtalk_stream_callback_ack(frame.message_id).stringify(),
+                      )
+                    }
+                }
+              }
+            } catch {
+              e => log_line("[imrelay] dingtalk: stream closed: \{e}")
+            }
+            conn.close()
+            @async.sleep(1000)
+          }
+        }
       }
     }
   }

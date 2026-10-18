@@ -962,6 +962,244 @@ test "dingtalk: credentials" {
 }
 
 ///|
+test "dingtalk: session webhook cache" {
+  assert_true(
+    @imrelay.dingtalk_session_webhook_url(
+      "https://api.dingtalk.com/v1.0/robot/sendBySession?session=x",
+    ),
+  )
+  assert_true(
+    @imrelay.dingtalk_session_webhook_url(
+      "https://oapi.dingtalk.com/robot/sendBySession?session=x",
+    ),
+  )
+  assert_false(
+    @imrelay.dingtalk_session_webhook_url("https://evil.example.com/robot"),
+  )
+  assert_false(@imrelay.dingtalk_session_webhook_url("https://hook"))
+  let future = @imrelay.now_ms() + 3_600_000L
+  @imrelay.dingtalk_remember_session(
+    "t-c1", "https://api.dingtalk.com/w1", future, "staff1", true,
+  )
+  let s = @imrelay.dingtalk_chat_session("t-c1").unwrap()
+  assert_eq(s.sender_id, "staff1")
+  assert_true(s.group)
+  // An expiry inside the five-minute safety margin is treated as stale.
+  @imrelay.dingtalk_remember_session(
+    "t-c2",
+    "https://api.dingtalk.com/w2",
+    @imrelay.now_ms() + 60_000L,
+    "u2",
+    false,
+  )
+  assert_true(@imrelay.dingtalk_chat_session("t-c2") is None)
+  // Unknown expiry (0) is kept.
+  @imrelay.dingtalk_remember_session(
+    "t-c3", "https://api.dingtalk.com/w3", 0L, "", false,
+  )
+  assert_true(@imrelay.dingtalk_chat_session("t-c3") is Some(_))
+  assert_true(@imrelay.dingtalk_chat_session("t-missing") is None)
+}
+
+///|
+test "dingtalk: parse remembers the session webhook" {
+  let body = @imrelay.json_obj([
+    ("msgtype", Json::string("text")),
+    ("text", @imrelay.json_obj([("content", Json::string("hi"))])),
+    ("conversationId", Json::string("t-cid-web")),
+    ("conversationType", Json::string("2")),
+    ("senderId", Json::string("u9")),
+    ("senderStaffId", Json::string("staff9")),
+    ("msgId", Json::string("m9")),
+    (
+      "sessionWebhook",
+      Json::string("https://api.dingtalk.com/v1.0/x?session=s1"),
+    ),
+    ("sessionWebhookExpiredTime", Json::number(3700000000000.0)),
+  ]).stringify()
+  let evs = @imrelay.dingtalk_parse_callback(body)
+  assert_eq(evs.length(), 1)
+  assert_eq(evs[0].user_id, Some("u9"))
+  let s = @imrelay.dingtalk_chat_session("t-cid-web").unwrap()
+  assert_eq(s.webhook, "https://api.dingtalk.com/v1.0/x?session=s1")
+  assert_eq(s.sender_id, "staff9")
+  assert_eq(s.expires_at, 3700000000000L)
+  assert_true(s.group)
+  // A webhook URL outside dingtalk.com is not remembered.
+  let bad = @imrelay.json_obj([
+    ("text", @imrelay.json_obj([("content", Json::string("hi"))])),
+    ("conversationId", Json::string("t-cid-bad")),
+    ("sessionWebhook", Json::string("https://evil.example.com/x")),
+  ]).stringify()
+  assert_eq(@imrelay.dingtalk_parse_callback(bad).length(), 1)
+  assert_true(@imrelay.dingtalk_chat_session("t-cid-bad") is None)
+}
+
+///|
+test "dingtalk: group trigger rules" {
+  let cfg = t_pcfg(@imrelay.Dingtalk, [
+    ("require_mention", "true"),
+    ("free_response_chats", "t-cid-free, t-cid-other"),
+    ("mention_patterns", "[\"hey bot\"]"),
+  ])
+  let mk = (chat : String, content : String, in_at : Bool, conv : String) => {
+    @imrelay.json_obj([
+      ("msgtype", Json::string("text")),
+      ("text", @imrelay.json_obj([("content", Json::string(content))])),
+      ("conversationId", Json::string(chat)),
+      ("conversationType", Json::string(conv)),
+      ("senderId", Json::string("u1")),
+      ("isInAtList", Json::boolean(in_at)),
+    ]).stringify()
+  }
+  // DMs always pass.
+  assert_eq(
+    @imrelay.dingtalk_parse_callback(mk("t-cid-dm", "hi", false, "1"), cfg~).length(),
+    1,
+  )
+  // Group without a mention: dropped.
+  assert_eq(
+    @imrelay.dingtalk_parse_callback(mk("t-cid-g", "hi", false, "2"), cfg~).length(),
+    0,
+  )
+  // The bot was @-mentioned.
+  assert_eq(
+    @imrelay.dingtalk_parse_callback(mk("t-cid-g", "hi", true, "2"), cfg~).length(),
+    1,
+  )
+  // free_response_chats entry.
+  assert_eq(
+    @imrelay.dingtalk_parse_callback(mk("t-cid-free", "hi", false, "2"), cfg~).length(),
+    1,
+  )
+  // mention_patterns substring, case-insensitive.
+  assert_eq(
+    @imrelay.dingtalk_parse_callback(
+      mk("t-cid-g", "Hey Bot ping", false, "2"),
+      cfg~,
+    ).length(),
+    1,
+  )
+  // require_mention off (the default): group messages pass.
+  assert_eq(
+    @imrelay.dingtalk_parse_callback(
+      mk("t-cid-g", "hi", false, "2"),
+      cfg=t_pcfg(@imrelay.Dingtalk, []),
+    ).length(),
+    1,
+  )
+}
+
+///|
+test "dingtalk: stream frames, acks and dedup" {
+  let frame_raw = @imrelay.json_obj([
+    ("specVersion", Json::string("1.0")),
+    ("type", Json::string("CALLBACK")),
+    (
+      "headers",
+      @imrelay.json_obj([
+        ("messageId", Json::string("mid-1")),
+        ("topic", Json::string("/v1.0/im/bot/messages/get")),
+        ("contentType", Json::string("application/json")),
+      ]),
+    ),
+    ("data", Json::string(DT_CB)),
+  ]).stringify()
+  let f = @imrelay.dingtalk_stream_frame(frame_raw).unwrap()
+  assert_eq(f.kind, "CALLBACK")
+  assert_eq(f.topic, @imrelay.dingtalk_stream_robot_topic)
+  assert_eq(f.message_id, "mid-1")
+  let data = match f.data {
+    String(s) => s
+    _ => "<none>"
+  }
+  assert_eq(@imrelay.dingtalk_parse_callback(data)[0].chat_id, "cid")
+  // SYSTEM ping frames echo the server's own headers and data.
+  let ping = @imrelay.dingtalk_stream_frame(
+    @imrelay.json_obj([
+      ("type", Json::string("SYSTEM")),
+      ("headers", @imrelay.json_obj([("topic", Json::string("ping"))])),
+      ("data", Json::string("{}")),
+    ]).stringify(),
+  ).unwrap()
+  assert_eq(ping.topic, "ping")
+  let echo = @imrelay.dingtalk_stream_echo_reply(ping.headers, ping.data)
+  assert_eq(@imrelay.json_field_int(echo, "code"), Some(200))
+  assert_eq(@imrelay.json_field_string(echo, "message"), Some("OK"))
+  assert_eq(@imrelay.json_field_string(echo, "data"), Some("{}"))
+  // The CALLBACK ack carries the frame id and a SUCCESS payload.
+  let ack = @imrelay.dingtalk_stream_callback_ack("mid-1")
+  assert_eq(
+    @imrelay.json_field_string(t_obj(ack, "headers"), "messageId"),
+    Some("mid-1"),
+  )
+  assert_eq(
+    @imrelay.json_field_string(ack, "data"),
+    Some("{\"status\":\"SUCCESS\"}"),
+  )
+  // Malformed frames are rejected.
+  assert_true(@imrelay.dingtalk_stream_frame("not json") is None)
+  assert_true(@imrelay.dingtalk_stream_frame("[1,2]") is None)
+  // Frame-id dedup: the first sight wins, redeliveries are dropped.
+  let id = "dedup-\{@imrelay.random_hex(4)}"
+  assert_false(@imrelay.dingtalk_stream_duplicate(id))
+  assert_true(@imrelay.dingtalk_stream_duplicate(id))
+}
+
+///|
+test "dingtalk: stream enablement and session payloads" {
+  let cfg = t_pcfg(@imrelay.Dingtalk, [
+    ("client_id", "k"),
+    ("client_secret", "s"),
+  ])
+  assert_true(@imrelay.dingtalk_stream_enabled(cfg))
+  assert_eq(@imrelay.dingtalk_robot_code(cfg), Some("k"))
+  assert_false(
+    @imrelay.dingtalk_stream_enabled(
+      t_pcfg(@imrelay.Dingtalk, [
+        ("client_id", "k"),
+        ("client_secret", "s"),
+        ("stream", "false"),
+      ]),
+    ),
+  )
+  assert_false(
+    @imrelay.dingtalk_stream_enabled(
+      t_pcfg(@imrelay.Dingtalk, [("client_id", "k")]),
+    ),
+  )
+  assert_false(@imrelay.dingtalk_stream_enabled(t_pcfg(@imrelay.Dingtalk, [])))
+  assert_eq(
+    @imrelay.dingtalk_robot_code(
+      t_pcfg(@imrelay.Dingtalk, [("robot_code", "rc"), ("client_id", "k")]),
+    ),
+    Some("rc"),
+  )
+  // The open-connection payload subscribes to the robot topic.
+  let body = @imrelay.dingtalk_stream_open_payload(cfg)
+  assert_eq(t_s(body, "clientId"), "k")
+  assert_eq(t_s(body, "clientSecret"), "s")
+  let subs = @imrelay.json_field_array(body, "subscriptions").unwrap()
+  assert_eq(t_s(subs[0], "type"), "CALLBACK")
+  assert_eq(t_s(subs[0], "topic"), "/v1.0/im/bot/messages/get")
+  // Session-webhook payloads are markdown; a mention adds the `at` block.
+  let quiet = @imrelay.dingtalk_session_payload("hi", "T", None)
+  assert_eq(t_s(quiet, "msgtype"), "markdown")
+  assert_eq(t_s(t_obj(quiet, "markdown"), "text"), "hi")
+  assert_eq(t_s(t_obj(quiet, "markdown"), "title"), "T")
+  assert_true(@imrelay.json_field_obj(quiet, "at") is None)
+  let loud = @imrelay.dingtalk_session_payload("hi", "T", Some("staff1"))
+  let ids = @imrelay.json_field_array(t_obj(loud, "at"), "atUserIds").unwrap()
+  assert_true(
+    match ids[0] {
+      Json::String(s) => s == "staff1"
+      _ => false
+    },
+  )
+  assert_eq(@imrelay.json_field_bool(t_obj(loud, "at"), "isAtAll"), Some(false))
+}
+
+///|
 test "weixin: config and send payload" {
   let cfg = t_pcfg(@imrelay.Weixin, [
     ("app_id", "bot"),

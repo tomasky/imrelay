@@ -17,6 +17,7 @@ import {
   "moonbitlang/async/stdio",
   "moonbitlang/async/tls",
   "moonbitlang/async/fs",
+  "moonbitlang/async/websocket",
 }
 
 import {
